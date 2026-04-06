@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 
 import toast from 'react-hot-toast'
+import { motion } from 'framer-motion'
 import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
 
@@ -298,6 +299,12 @@ function ReadPanel({ onSave }) {
     else toast.error('Invalid file type')
   }, [decodeImage])
 
+  const stopCamera = useCallback(() => {
+    readerRef.current?.reset()
+    readerRef.current = new BrowserMultiFormatReader()
+    setScanning(false)
+  }, [])
+
   const startCamera = useCallback(async () => {
     setScanning(true)
     setError('')
@@ -310,13 +317,7 @@ function ReadPanel({ onSave }) {
       setError('Could not access camera')
       setScanning(false)
     }
-  }, [showSuccess])
-
-  const stopCamera = useCallback(() => {
-    readerRef.current?.reset()
-    readerRef.current = new BrowserMultiFormatReader()
-    setScanning(false)
-  }, [])
+  }, [showSuccess, stopCamera])
 
   return (
     <div className="forge-card">

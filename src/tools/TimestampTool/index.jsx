@@ -3,6 +3,18 @@ import { Copy, Clock, RefreshCw, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import ToolHeader from '../../components/ToolHeader'
 
+function TimestampRow({ label, value, onCopy }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 13, color: 'var(--text)', fontFamily: 'var(--font-code)' }}>{value}</span>
+        <button type="button" onClick={() => onCopy(value)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}><Copy size={12} /></button>
+      </div>
+    </div>
+  )
+}
+
 function timeAgo(ts) {
   const diff = Math.abs(Date.now() - ts)
   const s = Math.floor(diff / 1000)
@@ -18,9 +30,10 @@ function timeAgo(ts) {
 export default function TimestampTool() {
   const [unixInput, setUnixInput] = useState('')
   const [dateInput, setDateInput] = useState('')
-  const [liveNow, setLiveNow] = useState(Date.now())
+  const [liveNow, setLiveNow] = useState(null)
 
   useEffect(() => {
+    setLiveNow(Date.now())
     const t = setInterval(() => setLiveNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
@@ -44,23 +57,16 @@ export default function TimestampTool() {
     setUnixInput(now.toString())
   }, [])
 
-  const copyText = (t) => { navigator.clipboard.writeText(t); toast.success('Copied') }
+  const copyText = useCallback((t) => {
+    navigator.clipboard.writeText(t)
+    toast.success('Copied')
+  }, [])
 
   const inputStyle = {
     background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
     padding: '12px 16px', color: 'var(--text)', fontFamily: 'var(--font-code)', fontSize: 14,
     outline: 'none', width: '100%',
   }
-
-  const Row = ({ label, value }) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 13, color: 'var(--text)', fontFamily: 'var(--font-code)' }}>{value}</span>
-        <button onClick={() => copyText(value)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}><Copy size={12} /></button>
-      </div>
-    </div>
-  )
 
   return (
     <div>
@@ -75,11 +81,11 @@ export default function TimestampTool() {
           <input value={unixInput} onChange={(e) => setUnixInput(e.target.value)} placeholder="e.g. 1700000000" style={inputStyle} />
           {parsedFromUnix && (
             <div style={{ marginTop: 16 }}>
-              <Row label="ISO 8601" value={parsedFromUnix.toISOString()} />
-              <Row label="UTC" value={parsedFromUnix.toUTCString()} />
-              <Row label="Local" value={parsedFromUnix.toLocaleString()} />
-              <Row label="Relative" value={timeAgo(parsedFromUnix.getTime())} />
-              <Row label="Milliseconds" value={parsedFromUnix.getTime().toString()} />
+              <TimestampRow label="ISO 8601" value={parsedFromUnix.toISOString()} onCopy={copyText} />
+              <TimestampRow label="UTC" value={parsedFromUnix.toUTCString()} onCopy={copyText} />
+              <TimestampRow label="Local" value={parsedFromUnix.toLocaleString()} onCopy={copyText} />
+              <TimestampRow label="Relative" value={timeAgo(parsedFromUnix.getTime())} onCopy={copyText} />
+              <TimestampRow label="Milliseconds" value={parsedFromUnix.getTime().toString()} onCopy={copyText} />
             </div>
           )}
           {unixInput && !parsedFromUnix && (
@@ -97,10 +103,10 @@ export default function TimestampTool() {
           <input type="datetime-local" value={dateInput} onChange={(e) => setDateInput(e.target.value)} style={inputStyle} />
           {parsedFromDate && (
             <div style={{ marginTop: 16 }}>
-              <Row label="Unix (seconds)" value={Math.floor(parsedFromDate.getTime() / 1000).toString()} />
-              <Row label="Unix (ms)" value={parsedFromDate.getTime().toString()} />
-              <Row label="ISO 8601" value={parsedFromDate.toISOString()} />
-              <Row label="Relative" value={timeAgo(parsedFromDate.getTime())} />
+              <TimestampRow label="Unix (seconds)" value={Math.floor(parsedFromDate.getTime() / 1000).toString()} onCopy={copyText} />
+              <TimestampRow label="Unix (ms)" value={parsedFromDate.getTime().toString()} onCopy={copyText} />
+              <TimestampRow label="ISO 8601" value={parsedFromDate.toISOString()} onCopy={copyText} />
+              <TimestampRow label="Relative" value={timeAgo(parsedFromDate.getTime())} onCopy={copyText} />
             </div>
           )}
         </div>
@@ -110,11 +116,11 @@ export default function TimestampTool() {
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Current Time</div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 32, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-code)' }}>{Math.floor(liveNow / 1000)}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-code)' }}>{liveNow == null ? '—' : Math.floor(liveNow / 1000)}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Unix</div>
           </div>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-code)' }}>{new Date(liveNow).toLocaleTimeString()}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-code)' }}>{liveNow == null ? '—' : new Date(liveNow).toLocaleTimeString()}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Local</div>
           </div>
         </div>

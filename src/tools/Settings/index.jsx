@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { Download, Upload, Trash2, Copy, AlertCircle, Sun, Moon, Keyboard, User, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useDeviceId } from '../../contexts/DeviceContext'

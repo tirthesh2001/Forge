@@ -1,4 +1,4 @@
-import { AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { X, HelpCircle, CheckCircle2, AlertCircle } from 'lucide-react'
 
 export default function HelpModal({ open, onClose, title, steps = [], dos = [], donts = [] }) {

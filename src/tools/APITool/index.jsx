@@ -343,7 +343,7 @@ export default function APITool() {
 
       const text = await res.text()
       setResponseSize(new Blob([text]).size)
-      const isJson = ct.includes('json') || /^\s*[\[{]/.test(text)
+      const isJson = ct.includes('json') || /^\s*[[{]/.test(text)
       setResponseBody(isJson ? prettyJson(text) : text)
 
       setHistory((prev) => [{ ...snap, id: uid(), sentAt: Date.now(), status: res.status }, ...prev].slice(0, 50))
@@ -384,7 +384,7 @@ export default function APITool() {
   const filteredResponseBody = useMemo(() => {
     if (!responseSearch || !responseBody) return null
     try {
-      const re = new RegExp(`(${responseSearch.replace(/[.*+?^${}()|\\[\]\\\\]/g, '\\$&')})`, 'gi')
+      const re = new RegExp(`(${responseSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
       const matchCount = (responseBody.match(re) || []).length
       return { matchCount }
     } catch {

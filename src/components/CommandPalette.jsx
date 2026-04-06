@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   QrCode, Braces, GitCompare, Table, Palette, KeyRound, Video,
   FileCode2, Clock, Hash, Regex, FileText, Search, Settings, Home,
