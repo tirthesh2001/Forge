@@ -12,12 +12,15 @@ function generateId() {
 }
 
 export function DeviceProvider({ children }) {
-  const [deviceId, setDeviceId] = useState(() => localStorage.getItem(STORAGE_KEY) || '')
+  const [deviceId, setDeviceId] = useState(() => {
+    try { return localStorage.getItem(STORAGE_KEY) || '' } catch { return '' }
+  })
   const [needsReconnect, setNeedsReconnect] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    let stored = ''
+    try { stored = localStorage.getItem(STORAGE_KEY) || '' } catch { stored = '' }
     if (stored) {
       setDeviceId(stored)
       setLoading(false)

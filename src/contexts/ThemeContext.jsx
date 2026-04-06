@@ -55,16 +55,26 @@ const THEME_PRESETS = {
 const ThemeContext = createContext()
 
 export function ThemeProvider({ children }) {
-  const [mode, setMode] = useState(() => localStorage.getItem('forge-theme-mode') || 'dark')
-  const [accentName, setAccentName] = useState(() => localStorage.getItem('forge-accent') || 'cyan')
-  const [customAccent, setCustomAccent] = useState(() => localStorage.getItem('forge-custom-accent') || '')
-  const [preset, setPreset] = useState(() => localStorage.getItem('forge-theme-preset') || 'default')
+  const [mode, setMode] = useState(() => {
+    try { return localStorage.getItem('forge-theme-mode') || 'dark' } catch { return 'dark' }
+  })
+  const [accentName, setAccentName] = useState(() => {
+    try { return localStorage.getItem('forge-accent') || 'cyan' } catch { return 'cyan' }
+  })
+  const [customAccent, setCustomAccent] = useState(() => {
+    try { return localStorage.getItem('forge-custom-accent') || '' } catch { return '' }
+  })
+  const [preset, setPreset] = useState(() => {
+    try { return localStorage.getItem('forge-theme-preset') || 'default' } catch { return 'default' }
+  })
 
   useEffect(() => {
-    localStorage.setItem('forge-theme-mode', mode)
-    localStorage.setItem('forge-accent', accentName)
-    localStorage.setItem('forge-theme-preset', preset)
-    if (customAccent) localStorage.setItem('forge-custom-accent', customAccent)
+    try {
+      localStorage.setItem('forge-theme-mode', mode)
+      localStorage.setItem('forge-accent', accentName)
+      localStorage.setItem('forge-theme-preset', preset)
+      if (customAccent) localStorage.setItem('forge-custom-accent', customAccent)
+    } catch { /* storage blocked or full */ }
 
     const themeColors = THEME_PRESETS[preset]?.[mode] || THEME_PRESETS.default[mode]
     const accent = accentName === 'custom'

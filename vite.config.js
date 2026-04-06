@@ -25,7 +25,10 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // Do not precache index.html: after deploy, old precached HTML can reference deleted hashed JS → blank page.
+        // Vercel rewrites already serve index.html for SPA routes; disable Workbox navigateFallback so we don't need a precached shell.
+        navigateFallback: null,
+        globPatterns: ['**/*.{js,css,svg,png,woff2}', '**/manifest.webmanifest', '**/registerSW.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
