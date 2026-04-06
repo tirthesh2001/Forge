@@ -110,7 +110,7 @@ This project is meant to stay simple: **develop locally**, **ship one production
 1. Push this repo to GitHub/GitLab/Bitbucket.
 2. In [Vercel](https://vercel.com) → **Add New Project** → import the repo.
 3. Vercel should detect **Vite** and use:
-   - **Install Command:** `npm install` (default — the repo includes `.npmrc` so installs succeed with Vite 8 + `vite-plugin-pwa`)
+   - **Install Command:** `npm install --legacy-peer-deps` (set in `vercel.json`; also see `package.json` **overrides** for Vite 8 + `vite-plugin-pwa`)
    - **Build Command:** `npm run build`
    - **Output Directory:** `dist`  
    (These match `vercel.json` in the repo.)
