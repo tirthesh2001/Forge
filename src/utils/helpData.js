@@ -1,0 +1,92 @@
+export const HELP = {
+  qr: {
+    title: 'QR Tools Help',
+    steps: ['Enter text, URL, or data in the input field', 'Adjust size, error correction, and colors', 'Download as PNG/SVG or copy the image', 'Switch to Read tab to scan QR codes from images or camera', 'Save frequently used QR codes for quick access'],
+    dos: ['Use high error correction (H) for QR codes that will be printed', 'Test your QR code after generating it', 'Save important QR codes for later use'],
+    donts: ['Don\'t use very light foreground colors on light backgrounds', 'Don\'t encode extremely long text (URLs are better)', 'Don\'t forget to verify scanned results before using them'],
+  },
+  json: {
+    title: 'JSON Editor Help',
+    steps: ['Paste or type JSON in the editor', 'Use the Format button to pretty-print', 'Toggle Tree View to explore the structure visually', 'Use Minify to compress JSON for APIs', 'Upload a .json file using the Upload button'],
+    dos: ['Validate JSON before sending to APIs', 'Use Format for readability when debugging', 'Use the tree view to understand nested structures'],
+    donts: ['Don\'t paste very large JSON files (>5MB) as it may slow the editor', 'Don\'t forget to copy your changes before navigating away', 'Don\'t mix single and double quotes in JSON keys'],
+  },
+  diff: {
+    title: 'Diff Tool Help',
+    steps: ['Enter original text on the left, modified text on the right', 'Choose between Text or JSON diff mode', 'Review highlighted changes line by line', 'Accept or reject individual changes to build a merged output', 'Copy the merged result when done'],
+    dos: ['Use JSON mode for structured data comparison', 'Review each change carefully before accepting', 'Use the swap button if you put content on the wrong side'],
+    donts: ['Don\'t compare extremely large files (>100KB each)', 'Don\'t forget to copy the merged output before leaving', 'Don\'t mix text and JSON modes for the same content'],
+  },
+  csv: {
+    title: 'CSV Editor Help',
+    steps: ['Import a CSV file or paste CSV data', 'Edit cells directly in the table', 'Add or remove rows and columns as needed', 'Sort columns by clicking headers', 'Export your data as CSV when done'],
+    dos: ['Back up your original file before making changes', 'Use the dummy data generator for testing', 'Verify column names after importing'],
+    donts: ['Don\'t edit very large CSV files (>10K rows) in the browser', 'Don\'t forget to export before navigating away', 'Don\'t leave empty column headers'],
+  },
+  color: {
+    title: 'Color Converter Help',
+    steps: ['Enter a color in any format (HEX, RGB, HSL, HSV)', 'All other formats will auto-update in real time', 'Browse the tints and shades palette', 'Save colors with a name for your collection', 'Click a saved color to load it back'],
+    dos: ['Save colors you use frequently', 'Use the palette to find lighter/darker variants', 'Copy the exact format you need for your code'],
+    donts: ['Don\'t enter invalid hex values (must be 6 characters)', 'Don\'t forget to save colors you want to keep', 'Don\'t confuse HSL and HSV values'],
+  },
+  jwt: {
+    title: 'JWT Tool Help',
+    steps: ['Paste a JWT token in the Decoder to inspect it', 'View decoded header and payload', 'Enter a secret/key to verify the signature', 'Switch to Encoder to build and sign new tokens', 'Choose the algorithm (HS256, RS256, ES256)'],
+    dos: ['Always verify tokens before trusting their contents', 'Use the Load Example button to understand the format', 'Check expiration times in the claims view'],
+    donts: ['Don\'t share your secret/private keys', 'Don\'t use HS256 with weak secrets in production', 'Don\'t trust unverified tokens'],
+  },
+  meet: {
+    title: 'Meet Quick-Join Help',
+    steps: ['Paste a Google Meet URL or meeting code', 'Optionally add a display name', 'Click Join Meeting to open in a new tab', 'Your meeting history is saved automatically', 'Click Rejoin on any past meeting to join again'],
+    dos: ['Test the meeting link before sharing it', 'Keep your meeting history for reference', 'Clear old meetings periodically'],
+    donts: ['Don\'t join meetings you weren\'t invited to', 'Don\'t share meeting codes publicly', 'Don\'t forget to allow microphone/camera permissions'],
+  },
+  base64: {
+    title: 'Base64 Help',
+    steps: ['Type or paste text in the input area', 'Output appears instantly on the right', 'Switch between Encode and Decode modes', 'Upload files to encode them to Base64', 'Use Swap to flip input/output'],
+    dos: ['Use for embedding small images in HTML/CSS', 'Encode API request bodies when needed', 'Verify decoded output matches expected content'],
+    donts: ['Don\'t encode very large files (>10MB)', 'Don\'t use Base64 as encryption (it\'s encoding, not security)', 'Don\'t forget that Base64 increases size by ~33%'],
+  },
+  timestamp: {
+    title: 'Timestamp Converter Help',
+    steps: ['Enter a Unix timestamp to see all date formats', 'Use the Now button to fill the current time', 'Use the date picker on the right to convert dates to Unix', 'Copy any result using the copy buttons', 'The live clock shows the current time in real-time'],
+    dos: ['Check whether your timestamp is in seconds or milliseconds', 'Use ISO 8601 format for APIs', 'Verify timezone when sharing timestamps'],
+    donts: ['Don\'t confuse seconds and milliseconds (10-digit vs 13-digit)', 'Don\'t assume timestamps are always UTC', 'Don\'t forget leap seconds exist (rare but real)'],
+  },
+  hash: {
+    title: 'Hash Generator Help',
+    steps: ['Enter text in the input area', 'All hash algorithms compute simultaneously', 'Upload a file to hash its contents', 'Copy any hash with the copy button', 'Compare hashes to verify file integrity'],
+    dos: ['Use SHA-256 or SHA-512 for security purposes', 'Hash files to verify downloads', 'Use MD5 only for checksums, not security'],
+    donts: ['Don\'t use MD5 or SHA-1 for password hashing', 'Don\'t assume same hash = same content (collisions exist)', 'Don\'t hash sensitive data and share the hash carelessly'],
+  },
+  regex: {
+    title: 'Regex Tester Help',
+    steps: ['Enter a regex pattern in the pattern input', 'Toggle flags (g, i, m, s) as needed', 'Type test text below to see highlighted matches', 'View match details including capture groups', 'Use the cheatsheet for pattern reference'],
+    dos: ['Start with simple patterns and build up', 'Test with edge cases', 'Use named capture groups for clarity', 'Save regex patterns you use often'],
+    donts: ['Don\'t forget to escape special characters', 'Don\'t use overly complex patterns (hard to maintain)', 'Don\'t rely on regex for parsing HTML'],
+  },
+  settings: {
+    title: 'Settings Help',
+    steps: ['Set up your profile with name, email, and birthday', 'Copy your Forge ID for data recovery', 'Customize accent color and theme mode', 'Reassign keyboard shortcuts', 'Export/Import data for backup'],
+    dos: ['Save your Forge ID somewhere safe', 'Export data regularly as backup', 'Customize shortcuts for tools you use most'],
+    donts: ['Don\'t share your Forge ID publicly', 'Don\'t reset data without exporting first', 'Don\'t import untrusted backup files'],
+  },
+  markdown: {
+    title: 'Markdown Preview Help',
+    steps: ['Write markdown in the left editor', 'See the rendered preview on the right in real-time', 'Use toolbar buttons for common formatting', 'Copy markdown source or rendered HTML', 'Supports GFM (tables, checkboxes, etc.)'],
+    dos: ['Use headers to structure your document', 'Preview before publishing or sharing', 'Use code blocks for code snippets'],
+    donts: ['Don\'t nest too many levels of lists', 'Don\'t forget blank lines between different elements', 'Don\'t use HTML unless markdown doesn\'t support your need'],
+  },
+  image: {
+    title: 'Image Tool Help',
+    steps: ['Drop or select an image file (PNG, JPEG, WebP)', 'Adjust dimensions with aspect ratio lock', 'Set quality for JPEG/WebP compression', 'Choose output format', 'Preview and download the processed image'],
+    dos: ['Use WebP for best compression on the web', 'Lock aspect ratio to prevent distortion', 'Compare file sizes before and after'],
+    donts: ['Don\'t upscale images significantly (quality loss)', 'Don\'t use maximum quality unless needed (larger files)', 'Don\'t forget to download your processed image'],
+  },
+  api: {
+    title: 'API Client Help',
+    steps: ['Enter a URL and select the HTTP method', 'Add headers, query params, or request body', 'Configure authentication if needed', 'Click Send to execute the request', 'View response body, headers, and timing'],
+    dos: ['Use the history to replay previous requests', 'Set Content-Type header for POST/PUT requests', 'Check for CORS errors in the response'],
+    donts: ['Don\'t send sensitive data over HTTP (use HTTPS)', 'Don\'t forget to add required auth headers', 'Don\'t test production APIs without permission'],
+  },
+}
