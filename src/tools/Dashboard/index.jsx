@@ -148,7 +148,7 @@ export default function Dashboard() {
             </button>
             {!isMobile && (
               <button onClick={installPWA} className="forge-btn forge-btn-primary" style={{ padding: '10px 18px', fontSize: 13 }}>
-                <Download size={15} /> Install Forge
+                <Download size={15} />
               </button>
             )}
           </div>

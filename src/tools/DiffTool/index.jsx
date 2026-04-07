@@ -5,19 +5,23 @@ import { javascript } from '@codemirror/lang-javascript'
 import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
 import { json } from '@codemirror/lang-json'
+import { oneDark } from '@codemirror/theme-one-dark'
 import { diffLines, diffWords } from 'diff'
 import { diff as deepDiff, applyChange } from 'deep-diff'
 import { ArrowLeftRight, Upload, Plus, Minus, Edit2, Check, X, Copy, RotateCcw, CheckCheck, Columns2, List } from 'lucide-react'
 import toast from 'react-hot-toast'
 import useCloudState from '../../hooks/useCloudState'
+import { useTheme } from '../../contexts/ThemeContext'
 import ToolHeader from '../../components/ToolHeader'
 import { copyWithHistory } from '../../utils/copyWithHistory'
 import DropZone from '../../components/DropZone'
 
-const DIFF_CM_THEME = EditorView.theme({
+/** Light Forge UI: full editor chrome so default syntax highlighting has correct surface contrast */
+const DIFF_CM_THEME_LIGHT = EditorView.theme({
   '&': { fontSize: '13px' },
-  '.cm-scroller': { fontFamily: 'var(--font-code)' },
-  '.cm-content': { padding: '12px 0' },
+  '.cm-editor': { backgroundColor: 'var(--bg)' },
+  '.cm-scroller': { fontFamily: 'var(--font-code)', backgroundColor: 'var(--bg)' },
+  '.cm-content': { padding: '12px 0', color: 'var(--text)' },
   '.cm-gutters': {
     backgroundColor: 'var(--bg)',
     color: 'var(--text-muted)',
@@ -34,8 +38,10 @@ const DIFF_INPUT_LANGS = [
   { id: 'css', label: 'CSS' },
 ]
 
-function diffInputExtensions(lang) {
-  const wrap = [EditorView.lineWrapping, DIFF_CM_THEME]
+function diffInputExtensions(lang, forgeThemeIsDark) {
+  const wrap = forgeThemeIsDark
+    ? [EditorView.lineWrapping]
+    : [EditorView.lineWrapping, DIFF_CM_THEME_LIGHT]
   switch (lang) {
     case 'json': return [...wrap, json()]
     case 'javascript': return [...wrap, javascript({ jsx: true, typescript: true })]
@@ -89,7 +95,19 @@ function WordDiff({ oldText, newText, type }) {
 
 const DIFF_ACCEPT = '.txt,.json,.md,.csv,.xml,.html,.js,.ts,.jsx,.tsx,.py,.java,.go,.rs,.rb,.css,.scss'
 
+const diffRowActionsStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  gap: 6,
+  flexShrink: 0,
+  minWidth: 80,
+}
+
 export default function DiffTool() {
+  const { mode: forgeThemeMode } = useTheme()
+  const forgeThemeIsDark = forgeThemeMode === 'dark'
+
   const [mode, setMode] = useCloudState('diff-mode', 'text')
   const [left, setLeft] = useCloudState('diff-left', '')
   const [right, setRight] = useCloudState('diff-right', '')
@@ -98,7 +116,16 @@ export default function DiffTool() {
   const leftFileRef = useRef(null)
   const rightFileRef = useRef(null)
 
-  const diffCmExtensions = useMemo(() => diffInputExtensions(diffInputLang), [diffInputLang])
+  const diffCmExtensions = useMemo(
+    () => diffInputExtensions(diffInputLang, forgeThemeIsDark),
+    [diffInputLang, forgeThemeIsDark],
+  )
+
+  const codeMirrorTheme = forgeThemeIsDark ? oneDark : undefined
+
+  useEffect(() => {
+    if (mode === 'json') setDiffInputLang('json')
+  }, [mode, setDiffInputLang])
 
   const swap = useCallback(() => {
     setLeft((l) => { setRight(l); return right })
@@ -366,6 +393,7 @@ export default function DiffTool() {
             <CodeMirror
               value={left}
               height="280px"
+              theme={codeMirrorTheme}
               extensions={diffCmExtensions}
               onChange={(v) => setLeft(v)}
               placeholder="Paste original content..."
@@ -400,6 +428,7 @@ export default function DiffTool() {
             <CodeMirror
               value={right}
               height="280px"
+              theme={codeMirrorTheme}
               extensions={diffCmExtensions}
               onChange={(v) => setRight(v)}
               placeholder="Paste modified content..."
@@ -479,28 +508,28 @@ export default function DiffTool() {
                   <div style={{ flex: 1, minWidth: 0, padding: '4px 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', borderRight: '1px solid var(--border)', color: isAdded ? '#22C55E' : (isChanged ? '#22C55E' : 'var(--text)') }}>
                     {rightT || '\u00a0'}
                   </div>
-                  <div style={{ width: 88, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                  <div style={diffRowActionsStyle}>
                     {(isAdded || isChanged) && !isDecided && (
                       <button type="button" onClick={() => decideLine(i, 'accepted')} title="Accept this change"
-                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: '0 4px', flexShrink: 0, opacity: 0.6 }}>
+                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: 4, flexShrink: 0, opacity: 0.85 }}>
                         <Check size={13} />
                       </button>
                     )}
                     {(isAdded || isChanged) && !isDecided && (
                       <button type="button" onClick={() => decideLine(i, 'rejected')} title="Reject this change"
-                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: '0 2px', flexShrink: 0, opacity: 0.6 }}>
+                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: 4, flexShrink: 0, opacity: 0.85 }}>
                         <X size={13} />
                       </button>
                     )}
                     {isRemoved && !isDecided && (
                       <button type="button" onClick={() => decideLine(i, 'accepted')} title="Keep this removed line"
-                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: '0 4px', flexShrink: 0, opacity: 0.6 }}>
+                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: 4, flexShrink: 0, opacity: 0.85 }}>
                         <Plus size={13} />
                       </button>
                     )}
                     {isRemoved && !isDecided && (
                       <button type="button" onClick={() => decideLine(i, 'rejected')} title="Drop this line"
-                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: '0 2px', flexShrink: 0, opacity: 0.6 }}>
+                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: 4, flexShrink: 0, opacity: 0.85 }}>
                         <X size={13} />
                       </button>
                     )}
@@ -528,7 +557,7 @@ export default function DiffTool() {
                   <span style={{ width: 20, textAlign: 'center', color: isDecided ? 'var(--accent)' : (isAdded || isChanged ? '#22C55E' : isRemoved ? '#EF4444' : 'transparent'), flexShrink: 0, userSelect: 'none', fontSize: 11 }}>
                     {isDecided ? '✓' : (isAdded || isChanged ? '~' : isRemoved ? '-' : '')}
                   </span>
-                  <span style={{ padding: '4px 8px 4px 4px', flex: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                  <span style={{ padding: '4px 8px 4px 4px', flex: 1, minWidth: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                     {isChanged ? (
                       <WordDiff oldText={line.oldText} newText={line.newText} type="changed" />
                     ) : (
@@ -537,30 +566,32 @@ export default function DiffTool() {
                       </span>
                     )}
                   </span>
-                  {(isAdded || isChanged) && !isDecided && (
-                    <button type="button" onClick={() => decideLine(i, 'accepted')} title="Accept this change"
-                      className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: '0 8px', flexShrink: 0, opacity: 0.6 }}>
-                      <Check size={13} />
-                    </button>
-                  )}
-                  {(isAdded || isChanged) && !isDecided && (
-                    <button type="button" onClick={() => decideLine(i, 'rejected')} title="Reject this change"
-                      className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: '0 4px 0 0', flexShrink: 0, opacity: 0.6 }}>
-                      <X size={13} />
-                    </button>
-                  )}
-                  {isRemoved && !isDecided && (
-                    <button type="button" onClick={() => decideLine(i, 'accepted')} title="Keep this removed line"
-                      className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: '0 8px', flexShrink: 0, opacity: 0.6 }}>
-                      <Plus size={13} />
-                    </button>
-                  )}
-                  {isRemoved && !isDecided && (
-                    <button type="button" onClick={() => decideLine(i, 'rejected')} title="Drop this line"
-                      className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: '0 4px 0 0', flexShrink: 0, opacity: 0.6 }}>
-                      <X size={13} />
-                    </button>
-                  )}
+                  <div style={diffRowActionsStyle}>
+                    {(isAdded || isChanged) && !isDecided && (
+                      <button type="button" onClick={() => decideLine(i, 'accepted')} title="Accept this change"
+                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: 4, flexShrink: 0, opacity: 0.85 }}>
+                        <Check size={13} />
+                      </button>
+                    )}
+                    {(isAdded || isChanged) && !isDecided && (
+                      <button type="button" onClick={() => decideLine(i, 'rejected')} title="Reject this change"
+                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: 4, flexShrink: 0, opacity: 0.85 }}>
+                        <X size={13} />
+                      </button>
+                    )}
+                    {isRemoved && !isDecided && (
+                      <button type="button" onClick={() => decideLine(i, 'accepted')} title="Keep this removed line"
+                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: 4, flexShrink: 0, opacity: 0.85 }}>
+                        <Plus size={13} />
+                      </button>
+                    )}
+                    {isRemoved && !isDecided && (
+                      <button type="button" onClick={() => decideLine(i, 'rejected')} title="Drop this line"
+                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: 4, flexShrink: 0, opacity: 0.85 }}>
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               )
             })
@@ -581,10 +612,10 @@ export default function DiffTool() {
                       {jd ? <span style={{ color: 'var(--accent)', fontSize: 11 }}>✓</span> : <desc.icon size={14} style={{ color: desc.color, flexShrink: 0 }} />}
                       <span style={{ color: jd ? 'var(--text-muted)' : desc.color, fontSize: 13, flex: 1 }}>{desc.text}</span>
                       {!jd && (
-                        <>
-                          <button onClick={() => decideJsonChange(i, 'accepted')} title="Accept" className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: '0 4px', opacity: 0.6 }}><Check size={13} /></button>
-                          <button onClick={() => decideJsonChange(i, 'rejected')} title="Reject" className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: '0 4px', opacity: 0.6 }}><X size={13} /></button>
-                        </>
+                        <div style={diffRowActionsStyle}>
+                          <button type="button" onClick={() => decideJsonChange(i, 'accepted')} title="Accept" className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: 4, opacity: 0.85 }}><Check size={13} /></button>
+                          <button type="button" onClick={() => decideJsonChange(i, 'rejected')} title="Reject" className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: 4, opacity: 0.85 }}><X size={13} /></button>
+                        </div>
                       )}
                     </div>
                   )
