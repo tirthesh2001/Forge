@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Copy, Clock, RefreshCw, X } from 'lucide-react'
-import toast from 'react-hot-toast'
 import ToolHeader from '../../components/ToolHeader'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 
 function TimestampRow({ label, value, onCopy }) {
   return (
@@ -58,8 +58,7 @@ export default function TimestampTool() {
   }, [])
 
   const copyText = useCallback((t) => {
-    navigator.clipboard.writeText(t)
-    toast.success('Copied')
+    copyWithHistory(t)
   }, [])
 
   const inputStyle = {
@@ -106,6 +105,8 @@ export default function TimestampTool() {
               <TimestampRow label="Unix (seconds)" value={Math.floor(parsedFromDate.getTime() / 1000).toString()} onCopy={copyText} />
               <TimestampRow label="Unix (ms)" value={parsedFromDate.getTime().toString()} onCopy={copyText} />
               <TimestampRow label="ISO 8601" value={parsedFromDate.toISOString()} onCopy={copyText} />
+              <TimestampRow label="UTC" value={parsedFromDate.toUTCString()} onCopy={copyText} />
+              <TimestampRow label="Local" value={parsedFromDate.toLocaleString()} onCopy={copyText} />
               <TimestampRow label="Relative" value={timeAgo(parsedFromDate.getTime())} onCopy={copyText} />
             </div>
           )}

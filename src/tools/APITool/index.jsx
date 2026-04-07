@@ -1,12 +1,16 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import toast from 'react-hot-toast'
 import {
   Send, Plus, Trash2, Copy, Clock, ChevronDown, ChevronUp,
   AlertCircle, Save, FolderOpen, Code, Search, RotateCcw, X,
-  Check, Eye, EyeOff,
+  Check, Eye, EyeOff, Layers, Upload, RefreshCw,
 } from 'lucide-react'
 import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
+import { applyEnvPlaceholders } from '../../utils/envPlaceholders'
+import { copyWithHistory } from '../../utils/copyWithHistory'
+import { parseCurl } from '../../utils/parseCurl'
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
 
@@ -57,6 +61,30 @@ const COMMON_HEADERS = [
 
 const uid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
+const DEFAULT_API_ENVS = {
+  activeId: 'dev',
+  environments: [
+    { id: 'dev', name: 'Development', vars: { baseUrl: '', token: '' } },
+    { id: 'staging', name: 'Staging', vars: { baseUrl: '', token: '' } },
+    { id: 'prod', name: 'Production', vars: { baseUrl: '', token: '' } },
+  ],
+}
+
+function normalizeApiEnvs(raw) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.environments) || raw.environments.length === 0) {
+    return DEFAULT_API_ENVS
+  }
+  const environments = raw.environments.map((e) => ({
+    id: e.id || uid(),
+    name: e.name || e.id || 'Env',
+    vars: e.vars && typeof e.vars === 'object' ? { ...e.vars } : {},
+  }))
+  const activeId = raw.activeId && environments.some((e) => e.id === raw.activeId)
+    ? raw.activeId
+    : environments[0].id
+  return { activeId, environments }
+}
+
 const emptyRow = () => ({ id: uid(), key: '', value: '', enabled: true })
 
 const inputStyle = {
@@ -97,6 +125,27 @@ function stripQuery(urlStr) {
 
 function prettyJson(raw) {
   try { return JSON.stringify(JSON.parse(raw), null, 2) } catch { return raw }
+}
+
+function classifyError(err) {
+  const msg = err?.message || String(err)
+  const lower = msg.toLowerCase()
+  if (err?.name === 'AbortError' || lower.includes('aborted')) {
+    return { type: 'timeout', title: 'Request timed out', detail: 'The server did not respond in time. Try increasing the timeout or check if the server is reachable.' }
+  }
+  if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('load failed') || err?.name === 'TypeError') {
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && /^http:\/\//i.test(msg)) {
+      return { type: 'mixed', title: 'Mixed content blocked', detail: 'Your browser blocked this HTTP request because Forge is served over HTTPS. Use an HTTPS endpoint or run Forge locally.' }
+    }
+    return { type: 'cors', title: 'Network or CORS error', detail: 'Could not reach the server. This is commonly caused by CORS restrictions, a wrong URL, or the server being down. If CORS is the issue, the server must include Access-Control-Allow-Origin headers, or use a proxy.' }
+  }
+  if (lower.includes('ssl') || lower.includes('cert') || lower.includes('tls')) {
+    return { type: 'ssl', title: 'SSL/TLS error', detail: 'The server has an invalid or expired certificate. If testing locally, try using HTTP or accept the certificate in your browser first.' }
+  }
+  if (lower.includes('dns') || lower.includes('not found') || lower.includes('resolve')) {
+    return { type: 'dns', title: 'DNS resolution failed', detail: 'Could not resolve the hostname. Check the URL for typos and ensure the domain exists.' }
+  }
+  return { type: 'unknown', title: msg, detail: 'An unexpected error occurred. Check the URL and your network connection.' }
 }
 
 function generateCurl(method, url, headers, body, bodyContentType, authType, bearerToken, basicUser, basicPass) {
@@ -202,6 +251,8 @@ function bulkToRows(text) {
 export default function APITool() {
   const [history, setHistory] = useCloudState('api-client-history', [])
   const [collections, setCollections] = useCloudState('api-client-collections', [])
+  const [envConfigRaw, setEnvConfig] = useCloudState('api-client-environments', DEFAULT_API_ENVS)
+  const envConfig = useMemo(() => normalizeApiEnvs(envConfigRaw), [envConfigRaw])
 
   const [method, setMethod] = useState('GET')
   const [url, setUrl] = useState('')
@@ -227,6 +278,7 @@ export default function APITool() {
   const [responseSearch, setResponseSearch] = useState('')
   const [saveName, setSaveName] = useState('')
   const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [envPanelOpen, setEnvPanelOpen] = useState(false)
 
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState(null)
@@ -237,22 +289,115 @@ export default function APITool() {
   const [responseContentType, setResponseContentType] = useState('')
   const [responseHeaderEntries, setResponseHeaderEntries] = useState([])
   const [errorMessage, setErrorMessage] = useState(null)
+  const [errorClassification, setErrorClassification] = useState(null)
   const [corsHint, setCorsHint] = useState(false)
+  const [timeoutSec, setTimeoutSec] = useState(30)
+  const [curlImportOpen, setCurlImportOpen] = useState(false)
+  const [curlInput, setCurlInput] = useState('')
 
   const urlInputRef = useRef(null)
-
-  const finalUrl = useMemo(() => buildUrl(url, params), [url, params])
-
-  useEffect(() => {
-    const handler = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault()
-        sendRequest()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+  const abortRef = useRef(null)
+  const historyScrollRef = useRef(null)
+  const HISTORY_ROW_H = 44
+  const historyVirtualizer = useVirtualizer({
+    count: history.length,
+    getScrollElement: () => historyScrollRef.current,
+    estimateSize: () => HISTORY_ROW_H,
+    overscan: 12,
   })
+
+  const activeVars = useMemo(() => {
+    const e = envConfig.environments.find((x) => x.id === envConfig.activeId)
+    return e?.vars || {}
+  }, [envConfig])
+
+  const resolvedUrl = useMemo(() => applyEnvPlaceholders(url.trim(), activeVars), [url, activeVars])
+  const resolvedParams = useMemo(
+    () => params.map((p) => ({ ...p, value: applyEnvPlaceholders(String(p.value ?? ''), activeVars) })),
+    [params, activeVars],
+  )
+
+  const finalUrl = useMemo(() => buildUrl(resolvedUrl, resolvedParams), [resolvedUrl, resolvedParams])
+
+  const updateActiveEnvVars = useCallback((updater) => {
+    setEnvConfig((prev) => {
+      const n = normalizeApiEnvs(prev)
+      return {
+        ...n,
+        environments: n.environments.map((e) =>
+          e.id === n.activeId ? { ...e, vars: typeof updater === 'function' ? updater(e.vars) : updater } : e,
+        ),
+      }
+    })
+  }, [setEnvConfig])
+
+  const setActiveEnvId = useCallback((id) => {
+    setEnvConfig((prev) => {
+      const n = normalizeApiEnvs(prev)
+      return { ...n, activeId: id }
+    })
+  }, [setEnvConfig])
+
+  const resolvedHeadersForCodegen = useMemo(
+    () => headers.map((h) => ({ ...h, value: applyEnvPlaceholders(h.value ?? '', activeVars) })),
+    [headers, activeVars],
+  )
+
+  const currentEnv = useMemo(
+    () => envConfig.environments.find((e) => e.id === envConfig.activeId),
+    [envConfig],
+  )
+
+  const envVarRows = useMemo(() => {
+    const v = activeVars
+    const keys = Object.keys(v)
+    const sorted = [...keys].sort((a, b) => {
+      const pri = (k) => (k === 'baseUrl' ? 0 : k === 'token' ? 1 : 2)
+      const d = pri(a) - pri(b)
+      return d !== 0 ? d : a.localeCompare(b)
+    })
+    const dataRows = sorted.map((k) => ({ id: `env-var-${k}`, key: k, value: String(v[k] ?? ''), enabled: true }))
+    return dataRows.length ? [...dataRows, emptyRow()] : [emptyRow()]
+  }, [activeVars])
+
+  const onEnvVarsChange = useCallback((rows) => {
+    const vars = {}
+    rows.filter((r) => r.key && r.enabled).forEach((r) => { vars[r.key] = r.value ?? '' })
+    updateActiveEnvVars(vars)
+  }, [updateActiveEnvVars])
+
+  const addEnvironment = useCallback(() => {
+    setEnvConfig((prev) => {
+      const n = normalizeApiEnvs(prev)
+      const id = uid()
+      return {
+        ...n,
+        environments: [...n.environments, { id, name: `Environment ${n.environments.length + 1}`, vars: { baseUrl: '', token: '' } }],
+        activeId: id,
+      }
+    })
+  }, [setEnvConfig])
+
+  const removeEnvironment = useCallback((id) => {
+    setEnvConfig((prev) => {
+      const n = normalizeApiEnvs(prev)
+      if (n.environments.length <= 1) return n
+      const environments = n.environments.filter((e) => e.id !== id)
+      let activeId = n.activeId
+      if (activeId === id) activeId = environments[0].id
+      return { ...n, environments, activeId }
+    })
+  }, [setEnvConfig])
+
+  const renameActiveEnvironment = useCallback((name) => {
+    setEnvConfig((prev) => {
+      const n = normalizeApiEnvs(prev)
+      return {
+        ...n,
+        environments: n.environments.map((e) => (e.id === n.activeId ? { ...e, name } : e)),
+      }
+    })
+  }, [setEnvConfig])
 
   const snapshot = useCallback(() => ({
     method, url, params: params.map((p) => ({ ...p })), headers: headers.map((h) => ({ ...h })),
@@ -290,39 +435,49 @@ export default function APITool() {
 
   const buildRequestHeaders = useCallback(() => {
     const h = new Headers()
-    headers.filter((r) => r.key && r.enabled).forEach((r) => h.set(r.key, r.value ?? ''))
+    headers.filter((r) => r.key && r.enabled).forEach((r) => h.set(r.key, applyEnvPlaceholders(r.value ?? '', activeVars)))
     const hasBody = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && bodyContentType !== 'none'
     if (hasBody && bodyContentType !== 'multipart/form-data') {
       if (!h.has('Content-Type')) h.set('Content-Type', bodyContentType)
     }
-    if (authType === 'bearer' && bearerToken.trim()) h.set('Authorization', `Bearer ${bearerToken.trim()}`)
-    else if (authType === 'basic' && (basicUser || basicPass)) h.set('Authorization', `Basic ${btoa(`${basicUser}:${basicPass}`)}`)
+    const bt = applyEnvPlaceholders(bearerToken, activeVars).trim()
+    const bu = applyEnvPlaceholders(basicUser, activeVars)
+    const bp = applyEnvPlaceholders(basicPass, activeVars)
+    if (authType === 'bearer' && bt) h.set('Authorization', `Bearer ${bt}`)
+    else if (authType === 'basic' && (bu || bp)) h.set('Authorization', `Basic ${btoa(`${bu}:${bp}`)}`)
     return h
-  }, [headers, method, bodyContentType, authType, bearerToken, basicUser, basicPass])
+  }, [headers, method, bodyContentType, authType, bearerToken, basicUser, basicPass, activeVars])
 
-  const sendRequest = async () => {
-    const target = buildUrl(url, params).trim()
+  const sendRequest = useCallback(async () => {
+    const target = finalUrl.trim()
     if (!target) { toast.error('Enter a URL'); return }
 
-    setLoading(true); setErrorMessage(null); setCorsHint(false)
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    const timeoutId = timeoutSec > 0
+      ? setTimeout(() => controller.abort(), timeoutSec * 1000)
+      : null
+
+    setLoading(true); setErrorMessage(null); setErrorClassification(null); setCorsHint(false)
     setStatus(null); setStatusText(''); setResponseTimeMs(null)
     setResponseBody(''); setResponseSize(0); setResponseHeaderEntries([])
     setResponseContentType(''); setResTab('body')
 
     const reqHeaders = buildRequestHeaders()
-    const opts = { method, headers: reqHeaders }
+    const opts = { method, headers: reqHeaders, signal: controller.signal }
     const hasBody = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && bodyContentType !== 'none'
     if (hasBody) {
       if (bodyContentType === 'application/x-www-form-urlencoded') {
         const urlParams = new URLSearchParams()
-        formDataRows.filter((r) => r.key && r.enabled).forEach((r) => urlParams.append(r.key, r.value ?? ''))
+        formDataRows.filter((r) => r.key && r.enabled).forEach((r) => urlParams.append(r.key, applyEnvPlaceholders(r.value ?? '', activeVars)))
         opts.body = urlParams.toString()
       } else if (bodyContentType === 'multipart/form-data') {
         const fd = new FormData()
-        formDataRows.filter((r) => r.key && r.enabled).forEach((r) => fd.append(r.key, r.value ?? ''))
+        formDataRows.filter((r) => r.key && r.enabled).forEach((r) => fd.append(r.key, applyEnvPlaceholders(r.value ?? '', activeVars)))
         opts.body = fd
       } else {
-        opts.body = body
+        opts.body = applyEnvPlaceholders(body, activeVars)
       }
     }
 
@@ -331,6 +486,7 @@ export default function APITool() {
 
     try {
       const res = await fetch(target, opts)
+      if (timeoutId) clearTimeout(timeoutId)
       const elapsed = Math.round(performance.now() - t0)
       setResponseTimeMs(elapsed)
       setStatus(res.status); setStatusText(res.statusText || '')
@@ -348,15 +504,29 @@ export default function APITool() {
 
       setHistory((prev) => [{ ...snap, id: uid(), sentAt: Date.now(), status: res.status }, ...prev].slice(0, 50))
     } catch (err) {
+      if (timeoutId) clearTimeout(timeoutId)
       setResponseTimeMs(Math.round(performance.now() - t0))
-      const msg = err?.message || String(err)
-      setErrorMessage(msg)
-      setCorsHint(/failed to fetch|networkerror|load failed/i.test(msg) || err?.name === 'TypeError')
+      const classified = classifyError(err)
+      setErrorMessage(classified.title)
+      setErrorClassification(classified)
+      setCorsHint(classified.type === 'cors')
       setHistory((prev) => [{ ...snap, id: uid(), sentAt: Date.now(), error: true }, ...prev].slice(0, 50))
     } finally {
       setLoading(false)
+      abortRef.current = null
     }
-  }
+  }, [finalUrl, buildRequestHeaders, method, bodyContentType, formDataRows, body, activeVars, snapshot, setHistory, timeoutSec])
+
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault()
+        sendRequest()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [sendRequest])
 
   const importQueryFromUrl = () => {
     if (!url.trim()) return
@@ -369,17 +539,71 @@ export default function APITool() {
     setMethod('GET'); setUrl(''); setParams([emptyRow()]); setHeaders([emptyRow()])
     setBody(''); setBodyContentType('none'); setFormDataRows([emptyRow()])
     setAuthType('none'); setBearerToken(''); setBasicUser(''); setBasicPass('')
-    setStatus(null); setResponseBody(''); setErrorMessage(null)
+    setStatus(null); setResponseBody(''); setErrorMessage(null); setErrorClassification(null)
     urlInputRef.current?.focus()
   }
 
+  const importFromCurl = useCallback(() => {
+    if (!curlInput.trim()) { toast.error('Paste a cURL command'); return }
+    const parsed = parseCurl(curlInput)
+    if (!parsed.url) { toast.error('Could not find a URL in the cURL command'); return }
+    const snap = {
+      method: parsed.method,
+      url: parsed.url,
+      headers: parsed.headers.map((h) => ({ id: uid(), key: h.key, value: h.value, enabled: true })),
+      body: parsed.body,
+      bodyContentType: parsed.bodyContentType,
+      formDataRows: parsed.formDataRows.map((f) => ({ id: uid(), key: f.key, value: f.value, enabled: true })),
+      authType: parsed.authType,
+      bearerToken: parsed.bearerToken,
+      basicUser: parsed.basicUser,
+      basicPass: parsed.basicPass,
+    }
+    loadSnapshot(snap)
+    setCurlImportOpen(false)
+    setCurlInput('')
+    toast.success('Imported from cURL')
+  }, [curlInput])
+
+  const handleUrlPaste = useCallback((e) => {
+    const pasted = e.clipboardData?.getData('text') || ''
+    if (pasted.trim().toLowerCase().startsWith('curl ')) {
+      e.preventDefault()
+      const parsed = parseCurl(pasted)
+      if (parsed.url) {
+        const snap = {
+          method: parsed.method,
+          url: parsed.url,
+          headers: parsed.headers.map((h) => ({ id: uid(), key: h.key, value: h.value, enabled: true })),
+          body: parsed.body,
+          bodyContentType: parsed.bodyContentType,
+          formDataRows: parsed.formDataRows.map((f) => ({ id: uid(), key: f.key, value: f.value, enabled: true })),
+          authType: parsed.authType,
+          bearerToken: parsed.bearerToken,
+          basicUser: parsed.basicUser,
+          basicPass: parsed.basicPass,
+        }
+        loadSnapshot(snap)
+        toast.success('Imported from cURL')
+      }
+    }
+  }, [])
+
   const codeSnippet = useMemo(() => {
     if (!codeSnippetLang) return ''
-    const target = buildUrl(url, params)
-    if (codeSnippetLang === 'curl') return generateCurl(method, target, headers, body, bodyContentType, authType, bearerToken, basicUser, basicPass)
-    if (codeSnippetLang === 'fetch') return generateFetch(method, target, headers, body, bodyContentType, authType, bearerToken, basicUser, basicPass)
+    const target = finalUrl
+    const subBody = applyEnvPlaceholders(body, activeVars)
+    const bt = applyEnvPlaceholders(bearerToken, activeVars)
+    const bu = applyEnvPlaceholders(basicUser, activeVars)
+    const bp = applyEnvPlaceholders(basicPass, activeVars)
+    if (codeSnippetLang === 'curl') {
+      return generateCurl(method, target, resolvedHeadersForCodegen, subBody, bodyContentType, authType, bt, bu, bp)
+    }
+    if (codeSnippetLang === 'fetch') {
+      return generateFetch(method, target, resolvedHeadersForCodegen, subBody, bodyContentType, authType, bt, bu, bp)
+    }
     return ''
-  }, [codeSnippetLang, method, url, params, headers, body, bodyContentType, authType, bearerToken, basicUser, basicPass])
+  }, [codeSnippetLang, method, finalUrl, resolvedHeadersForCodegen, body, bodyContentType, authType, bearerToken, basicUser, basicPass, activeVars])
 
   const filteredResponseBody = useMemo(() => {
     if (!responseSearch || !responseBody) return null
@@ -409,11 +633,99 @@ export default function APITool() {
           <button type="button" onClick={() => setCodeSnippetLang((l) => l ? null : 'curl')} className="forge-btn" style={{ fontSize: 11, padding: '5px 10px', gap: 4 }}>
             <Code size={13} /> Code
           </button>
+          <button type="button" onClick={() => setCurlImportOpen((o) => !o)} className="forge-btn" style={{ fontSize: 11, padding: '5px 10px', gap: 4, borderColor: curlImportOpen ? 'var(--accent)' : undefined }}>
+            <Upload size={13} /> Import cURL
+          </button>
           <button type="button" onClick={resetRequest} className="forge-btn" style={{ fontSize: 11, padding: '5px 10px', gap: 4 }}>
             <RotateCcw size={13} /> Reset
           </button>
+          <button type="button" onClick={() => setEnvPanelOpen((o) => !o)} className="forge-btn" style={{ fontSize: 11, padding: '5px 10px', gap: 4, borderColor: envPanelOpen ? 'var(--accent)' : undefined }}>
+            <Layers size={13} /> Environments
+          </button>
         </div>
       </ToolHeader>
+
+      {envPanelOpen && (
+        <div className="forge-card" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Environments</div>
+            <button type="button" onClick={() => setEnvPanelOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }} aria-label="Close environments">
+              <X size={16} />
+            </button>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 12 }}>
+            Variables are substituted in the request URL, query params, headers, body, and auth. Use placeholders like{' '}
+            <code style={{ fontFamily: 'var(--font-code)', fontSize: 11, background: 'var(--bg)', padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)' }}>{'{{baseUrl}}'}</code>
+            {' '}or{' '}
+            <code style={{ fontFamily: 'var(--font-code)', fontSize: 11, background: 'var(--bg)', padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)' }}>{'{{token}}'}</code>
+            {' '}— names match the keys you define below (spacing inside <code style={{ fontFamily: 'var(--font-code)' }}>{'{{ }}'}</code> is allowed).
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              Active
+              <select
+                value={envConfig.activeId}
+                onChange={(e) => setActiveEnvId(e.target.value)}
+                style={{ ...inputStyle, padding: '6px 10px', minWidth: 160 }}
+              >
+                {envConfig.environments.map((e) => (
+                  <option key={e.id} value={e.id}>{e.name}</option>
+                ))}
+              </select>
+            </label>
+            <button type="button" onClick={addEnvironment} className="forge-btn" style={{ fontSize: 11, padding: '5px 10px', gap: 4 }}>
+              <Plus size={13} /> Add environment
+            </button>
+            {envConfig.environments.length > 1 && (
+              <button type="button" onClick={() => removeEnvironment(envConfig.activeId)} className="forge-btn" style={{ fontSize: 11, padding: '5px 10px', gap: 4, color: '#EF4444', borderColor: 'rgba(239,68,68,0.35)' }}>
+                <Trash2 size={13} /> Delete current
+              </button>
+            )}
+          </div>
+          <div style={{ marginBottom: 12, maxWidth: 420 }}>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Environment name</label>
+            <input
+              value={currentEnv?.name ?? ''}
+              onChange={(e) => renameActiveEnvironment(e.target.value)}
+              placeholder="Development"
+              style={{ ...inputStyle, width: '100%', padding: '8px 10px', fontSize: 13 }}
+            />
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>Variables for this environment</div>
+          <KVEditor
+            rows={envVarRows}
+            onChange={onEnvVarsChange}
+            onAdd={() => onEnvVarsChange([...envVarRows, emptyRow()])}
+            onRemove={(id) => {
+              const next = envVarRows.filter((r) => r.id !== id)
+              onEnvVarsChange(next.length ? next : [emptyRow()])
+            }}
+            placeholder={['Key', 'Value']}
+          />
+        </div>
+      )}
+
+      {curlImportOpen && (
+        <div className="forge-card" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Import cURL</div>
+            <button type="button" onClick={() => setCurlImportOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }} aria-label="Close import">
+              <X size={16} />
+            </button>
+          </div>
+          <textarea
+            autoFocus
+            value={curlInput}
+            onChange={(e) => setCurlInput(e.target.value)}
+            placeholder={'Paste a cURL command here, e.g.\ncurl -X POST https://api.example.com/data \\\n  -H \'Content-Type: application/json\' \\\n  -d \'{"key": "value"}\''}
+            rows={5}
+            style={{ width: '100%', boxSizing: 'border-box', padding: 12, borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontFamily: 'var(--font-code)', fontSize: 12, lineHeight: 1.5, resize: 'vertical', marginBottom: 8 }}
+          />
+          <button type="button" onClick={importFromCurl} className="forge-btn forge-btn-primary" style={{ fontSize: 12, padding: '8px 16px', gap: 4 }}>
+            <Upload size={14} /> Import
+          </button>
+        </div>
+      )}
 
       {showSaveDialog && (
         <div className="forge-card" style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -464,7 +776,7 @@ export default function APITool() {
               ))}
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button type="button" onClick={() => { navigator.clipboard.writeText(codeSnippet); toast.success('Copied') }} className="forge-btn" style={{ fontSize: 11, padding: '4px 8px', gap: 4 }}>
+              <button type="button" onClick={() => copyWithHistory(codeSnippet)} className="forge-btn" style={{ fontSize: 11, padding: '4px 8px', gap: 4 }}>
                 <Copy size={12} /> Copy
               </button>
               <button type="button" onClick={() => setCodeSnippetLang(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
@@ -492,7 +804,8 @@ export default function APITool() {
           <div style={{ flex: 1, position: 'relative' }}>
             <input ref={urlInputRef} type="text" value={url} onChange={(e) => setUrl(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) sendRequest() }}
-              placeholder="https://api.example.com/endpoint"
+              onPaste={handleUrlPaste}
+              placeholder="https://api.example.com/endpoint  (or paste a cURL command)"
               style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius)', border: `2px solid ${mc}40`, background: 'var(--bg)', color: 'var(--text)', fontFamily: 'var(--font-code)', fontSize: 13, outline: 'none', transition: 'border-color 0.2s' }}
               onFocus={(e) => e.target.style.borderColor = mc}
               onBlur={(e) => e.target.style.borderColor = `${mc}40`} />
@@ -504,7 +817,7 @@ export default function APITool() {
           </button>
         </div>
 
-        {finalUrl && finalUrl !== url.trim() && (
+        {finalUrl && (finalUrl !== url.trim() || finalUrl !== resolvedUrl) && (
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, wordBreak: 'break-all', fontFamily: 'var(--font-code)', padding: '4px 8px', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)' }}>
             {finalUrl}
           </div>
@@ -655,8 +968,19 @@ export default function APITool() {
           </div>
         )}
 
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, opacity: 0.5 }}>
-          Press <kbd style={{ padding: '1px 4px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 3, fontFamily: 'var(--font-code)' }}>⌘ Enter</kbd> to send
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, fontSize: 10, color: 'var(--text-muted)', opacity: 0.5 }}>
+          <span>Press <kbd style={{ padding: '1px 4px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 3, fontFamily: 'var(--font-code)' }}>⌘ Enter</kbd> to send</span>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: 1 }}>
+            Timeout
+            <input
+              type="number"
+              min={0}
+              max={300}
+              value={timeoutSec}
+              onChange={(e) => setTimeoutSec(Math.max(0, Math.min(300, Number(e.target.value) || 0)))}
+              style={{ width: 44, padding: '2px 4px', fontSize: 10, fontFamily: 'var(--font-code)', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 3, textAlign: 'center' }}
+            />s
+          </label>
         </div>
       </div>
 
@@ -682,7 +1006,7 @@ export default function APITool() {
               </span>
             )}
           </div>
-          <button type="button" onClick={() => { navigator.clipboard.writeText(errorMessage || responseBody); toast.success('Copied') }} className="forge-btn" style={{ fontSize: 11, padding: '4px 8px', gap: 4 }}>
+          <button type="button" onClick={() => copyWithHistory(errorMessage || responseBody)} className="forge-btn" style={{ fontSize: 11, padding: '4px 8px', gap: 4 }}>
             <Copy size={12} /> Copy
           </button>
         </div>
@@ -690,9 +1014,14 @@ export default function APITool() {
         {errorMessage && (
           <div style={{ display: 'flex', gap: 10, padding: 12, marginBottom: 10, borderRadius: 6, border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.06)' }}>
             <AlertCircle size={18} style={{ flexShrink: 0, color: '#EF4444', marginTop: 1 }} />
-            <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, lineHeight: 1.5, flex: 1 }}>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>{errorMessage}</div>
-              {corsHint && <div style={{ color: 'var(--text-muted)' }}>This is likely a CORS error. The target server must include Access-Control-Allow-Origin headers. Use a proxy or make the request from your own backend.</div>}
+              {errorClassification?.detail && (
+                <div style={{ color: 'var(--text-muted)', marginBottom: 8 }}>{errorClassification.detail}</div>
+              )}
+              <button type="button" onClick={sendRequest} className="forge-btn" style={{ fontSize: 11, padding: '4px 10px', gap: 4 }}>
+                <RefreshCw size={12} /> Retry
+              </button>
             </div>
           </div>
         )}
@@ -764,33 +1093,62 @@ export default function APITool() {
           {historyOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
         {historyOpen && (
-          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ marginTop: 8 }}>
             {history.length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '8px 0' }}>No requests yet</div>}
-            {history.map((h) => {
-              const hc = METHOD_COLORS[h.method] || '#64748B'
-              const sc = h.status ? statusColor(h.status) : (h.error ? '#EF4444' : 'var(--text-muted)')
-              return (
-                <button key={h.id || h.sentAt} type="button" onClick={() => { loadSnapshot(h); toast.success('Request loaded') }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', textAlign: 'left', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)', cursor: 'pointer', width: '100%', transition: 'border-color 0.15s' }}
-                  onMouseEnter={(e) => e.currentTarget.style.borderColor = hc}
-                  onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border)'}>
-                  <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3, background: `${hc}20`, color: hc, fontFamily: 'var(--font-code)', flexShrink: 0 }}>{h.method}</span>
-                  <span style={{ flex: 1, fontSize: 11, fontFamily: 'var(--font-code)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
-                    {buildUrl(h.url, h.params || [])}
-                  </span>
-                  {h.status && <span style={{ fontSize: 10, fontWeight: 600, color: sc, fontFamily: 'var(--font-code)', flexShrink: 0 }}>{h.status}</span>}
-                  {h.error && <AlertCircle size={12} style={{ color: '#EF4444', flexShrink: 0 }} />}
-                  <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-code)', flexShrink: 0 }}>
-                    {h.sentAt ? new Date(h.sentAt).toLocaleTimeString() : ''}
-                  </span>
-                </button>
-              )
-            })}
             {history.length > 0 && (
-              <button type="button" onClick={() => { setHistory([]); toast.success('History cleared') }}
-                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 0', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>
-                <Trash2 size={12} /> Clear history
-              </button>
+              <>
+                <div ref={historyScrollRef} style={{ maxHeight: 280, overflow: 'auto', marginBottom: 4 }}>
+                  <div style={{ height: historyVirtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
+                    {historyVirtualizer.getVirtualItems().map((vi) => {
+                      const h = history[vi.index]
+                      const hc = METHOD_COLORS[h.method] || '#64748B'
+                      const sc = h.status ? statusColor(h.status) : (h.error ? '#EF4444' : 'var(--text-muted)')
+                      return (
+                        <button
+                          key={h.id || h.sentAt}
+                          type="button"
+                          onClick={() => { loadSnapshot(h); toast.success('Request loaded') }}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: vi.size,
+                            transform: `translateY(${vi.start}px)`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '7px 10px',
+                            textAlign: 'left',
+                            border: '1px solid var(--border)',
+                            borderRadius: 6,
+                            background: 'var(--bg)',
+                            cursor: 'pointer',
+                            boxSizing: 'border-box',
+                            transition: 'border-color 0.15s',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = hc }}
+                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)' }}
+                        >
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3, background: `${hc}20`, color: hc, fontFamily: 'var(--font-code)', flexShrink: 0 }}>{h.method}</span>
+                          <span style={{ flex: 1, fontSize: 11, fontFamily: 'var(--font-code)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
+                            {buildUrl(h.url, h.params || [])}
+                          </span>
+                          {h.status ? <span style={{ fontSize: 10, fontWeight: 600, color: sc, fontFamily: 'var(--font-code)', flexShrink: 0 }}>{h.status}</span> : null}
+                          {h.error ? <AlertCircle size={12} style={{ color: '#EF4444', flexShrink: 0 }} /> : null}
+                          <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-code)', flexShrink: 0 }}>
+                            {h.sentAt ? new Date(h.sentAt).toLocaleTimeString() : ''}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                <button type="button" onClick={() => { setHistory([]); toast.success('History cleared') }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 0', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>
+                  <Trash2 size={12} /> Clear history
+                </button>
+              </>
             )}
           </div>
         )}

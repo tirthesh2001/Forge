@@ -7,14 +7,14 @@ export const HELP = {
   },
   json: {
     title: 'JSON Editor Help',
-    steps: ['Paste or type JSON in the editor', 'Use the Format button to pretty-print', 'Toggle Tree View to explore the structure visually', 'Use Minify to compress JSON for APIs', 'Upload a .json file using the Upload button'],
-    dos: ['Validate JSON before sending to APIs', 'Use Format for readability when debugging', 'Use the tree view to understand nested structures'],
+    steps: ['Paste or type JSON in the editor', 'Use Format / Minify and toggle Tree View to explore structure', 'Open Schema to paste a JSON Schema and validate your document against it', 'Use the JSONPath bar (e.g. $.tools[0]) to query and list matching values', 'Use Convert to export TypeScript types or a Go struct from the parsed JSON', 'Upload a .json file with the Upload button'],
+    dos: ['Validate with Schema before treating data as contract-safe', 'Use JSONPath to debug nested API payloads', 'Use TypeScript/Go export for quick codegen from JSON samples'],
     donts: ['Don\'t paste very large JSON files (>5MB) as it may slow the editor', 'Don\'t forget to copy your changes before navigating away', 'Don\'t mix single and double quotes in JSON keys'],
   },
   diff: {
     title: 'Diff Tool Help',
-    steps: ['Enter original text on the left, modified text on the right', 'Choose between Text or JSON diff mode', 'Review highlighted changes line by line', 'Accept or reject individual changes to build a merged output', 'Copy the merged result when done'],
-    dos: ['Use JSON mode for structured data comparison', 'Review each change carefully before accepting', 'Use the swap button if you put content on the wrong side'],
+    steps: ['Enter original text on the left, modified text on the right', 'Choose Text or JSON mode; toggle Unified vs Split view in Text mode', 'In Text mode, review inline or side-by-side with syntax-highlighted panes when enabled', 'Accept or reject changes to build a merged output', 'Copy the merged result when done'],
+    dos: ['Use JSON mode for structured data comparison', 'Use Split view for wide files', 'Review each change carefully before accepting', 'Use the swap button if you put content on the wrong side'],
     donts: ['Don\'t compare extremely large files (>100KB each)', 'Don\'t forget to copy the merged output before leaving', 'Don\'t mix text and JSON modes for the same content'],
   },
   csv: {
@@ -85,8 +85,8 @@ export const HELP = {
   },
   api: {
     title: 'API Client Help',
-    steps: ['Enter a URL and select the HTTP method', 'Add headers, query params, or request body', 'Configure authentication if needed', 'Click Send to execute the request', 'View response body, headers, and timing'],
-    dos: ['Use the history to replay previous requests', 'Set Content-Type header for POST/PUT requests', 'Check for CORS errors in the response'],
+    steps: ['Open Environments to define named sets of variables (e.g. baseUrl, token) and pick the active set', 'Enter a URL using placeholders like {{baseUrl}} — they are replaced for the real request, headers, body, auth, and generated code', 'Select the HTTP method and add params, headers, or body as needed', 'Configure authentication if needed', 'Click Send to execute the request', 'View response body, headers, and timing'],
+    dos: ['Use the history to replay previous requests', 'Keep secrets in environment variables per environment, not in shared request URLs', 'Set Content-Type header for POST/PUT requests', 'Check for CORS errors in the response'],
     donts: ['Don\'t send sensitive data over HTTP (use HTTPS)', 'Don\'t forget to add required auth headers', 'Don\'t test production APIs without permission'],
   },
 }

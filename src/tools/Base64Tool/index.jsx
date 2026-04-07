@@ -3,6 +3,7 @@ import { Copy, Download, Upload, FileCode2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 import DropZone from '../../components/DropZone'
 
 export default function Base64Tool() {
@@ -118,7 +119,7 @@ export default function Base64Tool() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Output</span>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button type="button" onClick={() => { navigator.clipboard.writeText(output); toast.success('Copied') }} className="forge-btn" style={{ padding: '3px 8px', fontSize: 11 }}><Copy size={11} /> Copy</button>
+              <button type="button" onClick={() => copyWithHistory(output)} className="forge-btn" style={{ padding: '3px 8px', fontSize: 11 }}><Copy size={11} /> Copy</button>
               {mode === 'decode' && (
                 <button type="button" onClick={downloadDecoded} className="forge-btn" style={{ padding: '3px 8px', fontSize: 11 }}><Download size={11} /> File</button>
               )}

@@ -7,9 +7,8 @@ import {
 } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 import { useDeviceId } from '../contexts/DeviceContext'
+import { copyWithHistory } from '../utils/copyWithHistory'
 import ForgeIcon from './ForgeIcon'
-import toast from 'react-hot-toast'
-
 const navItems = [
   { label: 'Home', icon: Home, path: '/', defaultKey: null },
   { label: 'QR Tools', icon: QrCode, path: '/qr', defaultKey: '1' },
@@ -165,7 +164,7 @@ export default function Sidebar({ collapsed, onToggle, isMobile }) {
         </button>
 
         {!collapsed && deviceId && (
-          <button onClick={() => { navigator.clipboard.writeText(deviceId); toast.success('Forge ID copied') }}
+          <button onClick={() => copyWithHistory(deviceId, 'Forge ID copied')}
             title="Click to copy your Forge ID"
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%',

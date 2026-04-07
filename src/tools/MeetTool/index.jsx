@@ -3,6 +3,7 @@ import { ExternalLink, Clock, Trash2, Video, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
 import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 
 function parseMeetCode(input) {
   if (!input.trim()) return null
@@ -123,7 +124,7 @@ export default function MeetTool() {
               <span style={{ fontSize: 13, fontFamily: 'var(--font-code)', color: 'var(--accent)' }}>
                 meet.google.com/{parsed}
               </span>
-              <button onClick={() => { navigator.clipboard.writeText(meetUrl); toast.success('Copied') }}
+              <button onClick={() => copyWithHistory(meetUrl)}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                 <Copy size={14} />
               </button>

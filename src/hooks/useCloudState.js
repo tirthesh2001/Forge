@@ -4,6 +4,9 @@ import { useDeviceId } from '../contexts/DeviceContext'
 
 const DEBOUNCE_MS = 500
 
+/** Dispatched after Settings import (or any bulk localStorage write) so hooks re-read their keys. */
+export const FORGE_STORAGE_IMPORT = 'forge-storage-import'
+
 export default function useCloudState(category, defaultValue) {
   const deviceId = useDeviceId()
   const localKey = `forge-${category}`
@@ -19,6 +22,11 @@ export default function useCloudState(category, defaultValue) {
 
   const timerRef = useRef(null)
   const mountedRef = useRef(true)
+  const defaultRef = useRef(defaultValue)
+
+  useEffect(() => {
+    defaultRef.current = defaultValue
+  }, [defaultValue])
 
   useEffect(() => {
     mountedRef.current = true
@@ -40,6 +48,20 @@ export default function useCloudState(category, defaultValue) {
         }
       })
   }, [deviceId, category])
+
+  useEffect(() => {
+    const onImport = () => {
+      try {
+        const stored = localStorage.getItem(localKey)
+        if (stored !== null) setValue(JSON.parse(stored))
+        else setValue(defaultRef.current)
+      } catch {
+        setValue(defaultRef.current)
+      }
+    }
+    window.addEventListener(FORGE_STORAGE_IMPORT, onImport)
+    return () => window.removeEventListener(FORGE_STORAGE_IMPORT, onImport)
+  }, [localKey])
 
   const update = useCallback((valOrFn) => {
     setValue((prev) => {

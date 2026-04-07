@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import toast from 'react-hot-toast'
-import { Download, RotateCcw, Lock, Unlock, Image as ImageIcon } from 'lucide-react'
+import { Download, RotateCcw, Lock, Unlock, Image as ImageIcon, Target, Percent } from 'lucide-react'
 import DropZone from '../../components/DropZone'
 import ToolHeader from '../../components/ToolHeader'
 
@@ -35,6 +35,11 @@ export default function ImageTool() {
   const [processedBlob, setProcessedBlob] = useState(null)
   const [processedUrl, setProcessedUrl] = useState(null)
   const [processing, setProcessing] = useState(false)
+  const [compressMode, setCompressMode] = useState('percentage')
+  const [targetSizeValue, setTargetSizeValue] = useState('')
+  const [targetSizeUnit, setTargetSizeUnit] = useState('KB')
+  const [targetSizeStatus, setTargetSizeStatus] = useState(null)
+  const [targetSizeProcessing, setTargetSizeProcessing] = useState(false)
   const revokeProcessed = useRef(null)
 
   useEffect(() => {
@@ -171,6 +176,68 @@ export default function ImageTool() {
     setTab('resize')
   }, [])
 
+  const compressToTargetSize = useCallback(async () => {
+    if (!objectUrl || !natural.w || outputFormat === 'png') return
+    const targetBytes = parseFloat(targetSizeValue) * (targetSizeUnit === 'MB' ? 1024 * 1024 : 1024)
+    if (!targetBytes || targetBytes <= 0) {
+      toast.error('Enter a valid target size')
+      return
+    }
+    setTargetSizeProcessing(true)
+    setTargetSizeStatus('Compressing...')
+
+    const img = new window.Image()
+    img.src = objectUrl
+    await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject })
+
+    const tw = clampDim(targetW)
+    const th = clampDim(targetH)
+    const canvas = document.createElement('canvas')
+    canvas.width = tw
+    canvas.height = th
+    const ctx = canvas.getContext('2d')
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(img, 0, 0, tw, th)
+
+    const mime = mimeForFormat(outputFormat)
+    const toBlob = (q) => new Promise((resolve) => canvas.toBlob(resolve, mime, q))
+
+    let lo = 0.01, hi = 1.0, bestBlob = null, bestQ = 0.5
+    const tolerance = 0.08
+
+    for (let i = 0; i < 12; i++) {
+      const mid = (lo + hi) / 2
+      const blob = await toBlob(mid)
+      if (!blob) break
+      bestBlob = blob
+      bestQ = mid
+      const ratio = blob.size / targetBytes
+      if (Math.abs(ratio - 1) < tolerance) break
+      if (blob.size > targetBytes) hi = mid
+      else lo = mid
+    }
+
+    if (bestBlob) {
+      setProcessedBlob(bestBlob)
+      if (revokeProcessed.current) URL.revokeObjectURL(revokeProcessed.current)
+      const next = URL.createObjectURL(bestBlob)
+      revokeProcessed.current = next
+      setProcessedUrl(next)
+      setQuality(Math.round(bestQ * 100))
+      const achieved = bestBlob.size < 1024
+        ? `${bestBlob.size} B`
+        : bestBlob.size < 1024 * 1024
+          ? `${(bestBlob.size / 1024).toFixed(1)} KB`
+          : `${(bestBlob.size / (1024 * 1024)).toFixed(2)} MB`
+      setTargetSizeStatus(`Achieved: ${achieved}`)
+    } else {
+      setTargetSizeStatus('Could not reach target')
+      toast.error('Compression failed')
+    }
+    setTargetSizeProcessing(false)
+  }, [objectUrl, natural.w, targetW, targetH, outputFormat, targetSizeValue, targetSizeUnit])
+
   const resetAll = useCallback(() => {
     setFile(null)
     setNatural({ w: 0, h: 0 })
@@ -185,6 +252,10 @@ export default function ImageTool() {
     setQuality(85)
     setOutputFormat('webp')
     setAspectLock(true)
+    setCompressMode('percentage')
+    setTargetSizeValue('')
+    setTargetSizeUnit('KB')
+    setTargetSizeStatus(null)
   }, [])
 
   const download = useCallback(() => {
@@ -341,28 +412,94 @@ export default function ImageTool() {
 
             {tab === 'compress' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <label style={labelStyle}>
-                  Quality ({quality}%)
-                  {(outputFormat === 'png') && (
-                    <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> — PNG is lossless; quality applies to JPEG/WebP only</span>
-                  )}
-                </label>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={quality}
-                  onChange={(e) => setQuality(Number(e.target.value))}
-                  disabled={outputFormat === 'png'}
-                  style={{
-                    width: '100%',
-                    accentColor: 'var(--accent)',
-                    opacity: outputFormat === 'png' ? 0.4 : 1,
-                  }}
-                />
-                <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
-                  Lower quality yields smaller files for JPEG and WebP.
-                </p>
+                {outputFormat === 'png' && (
+                  <p style={{ margin: 0, fontSize: 11, color: '#F97316', fontFamily: 'var(--font-ui)', padding: '6px 10px', background: 'rgba(249,115,22,0.08)', borderRadius: 6, border: '1px solid rgba(249,115,22,0.2)' }}>
+                    PNG is lossless — compression controls apply to JPEG and WebP only.
+                  </p>
+                )}
+                {outputFormat !== 'png' && (
+                  <>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        type="button"
+                        className={`forge-btn ${compressMode === 'percentage' ? 'forge-btn-primary' : ''}`}
+                        onClick={() => setCompressMode('percentage')}
+                        style={{ fontSize: 11, padding: '5px 10px', gap: 4 }}
+                      >
+                        <Percent size={12} /> By Percentage
+                      </button>
+                      <button
+                        type="button"
+                        className={`forge-btn ${compressMode === 'target' ? 'forge-btn-primary' : ''}`}
+                        onClick={() => setCompressMode('target')}
+                        style={{ fontSize: 11, padding: '5px 10px', gap: 4 }}
+                      >
+                        <Target size={12} /> By Target Size
+                      </button>
+                    </div>
+
+                    {compressMode === 'percentage' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <label style={labelStyle}>
+                          Compression ({100 - quality}%)
+                        </label>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={100 - quality}
+                          onChange={(e) => setQuality(100 - Number(e.target.value))}
+                          style={{ width: '100%', accentColor: 'var(--accent)' }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+                          <span>Less compression</span>
+                          <span>More compression</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {compressMode === 'target' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <label style={labelStyle}>Target file size</label>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input
+                            type="number"
+                            min={1}
+                            value={targetSizeValue}
+                            onChange={(e) => { setTargetSizeValue(e.target.value); setTargetSizeStatus(null) }}
+                            placeholder="e.g. 250"
+                            style={{ ...inputStyle, flex: 1 }}
+                          />
+                          <select
+                            value={targetSizeUnit}
+                            onChange={(e) => { setTargetSizeUnit(e.target.value); setTargetSizeStatus(null) }}
+                            style={{ ...inputStyle, flex: 'none', width: 70, cursor: 'pointer' }}
+                          >
+                            <option value="KB">KB</option>
+                            <option value="MB">MB</option>
+                          </select>
+                          <button
+                            type="button"
+                            className="forge-btn forge-btn-primary"
+                            onClick={compressToTargetSize}
+                            disabled={targetSizeProcessing || !targetSizeValue}
+                            style={{ fontSize: 11, padding: '7px 14px', whiteSpace: 'nowrap' }}
+                          >
+                            {targetSizeProcessing ? 'Compressing...' : 'Compress'}
+                          </button>
+                        </div>
+                        {targetSizeStatus && (
+                          <p style={{ margin: 0, fontSize: 12, color: 'var(--accent)', fontFamily: 'var(--font-code)' }}>
+                            {targetSizeStatus}
+                          </p>
+                        )}
+                        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+                          Automatically finds the best compression level to reach your target size.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 

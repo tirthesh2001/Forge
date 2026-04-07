@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Sidebar from './Sidebar'
 import CommandPalette from './CommandPalette'
+import ClipboardHistoryPanel from './ClipboardHistoryPanel'
 
 const pageVariants = {
   initial: { opacity: 0, y: 10 },
@@ -72,6 +73,7 @@ export default function Layout() {
         </div>
       </main>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <ClipboardHistoryPanel />
     </div>
   )
 }

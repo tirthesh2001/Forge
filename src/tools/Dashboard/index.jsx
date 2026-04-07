@@ -10,6 +10,7 @@ import useCloudState from '../../hooks/useCloudState'
 import ForgeIcon from '../../components/ForgeIcon'
 import DotGrid from '../../components/DotGrid'
 import toast from 'react-hot-toast'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 
 const DEFAULT_TOOLS = [
   { id: 'qr', label: 'QR Tools', desc: 'Generate & scan QR codes', icon: 'QrCode', path: '/qr', color: '#00D4FF' },
@@ -81,8 +82,7 @@ export default function Dashboard() {
 
   const shareForge = useCallback(() => {
     if (!deviceId) { toast.error('No Forge ID found'); return }
-    navigator.clipboard.writeText(deviceId)
-    toast.success('Forge ID copied! Share it so others can import your data.')
+    copyWithHistory(deviceId, 'Forge ID copied! Share it so others can import your data.')
   }, [deviceId])
 
   const now = new Date()
@@ -112,6 +112,10 @@ export default function Dashboard() {
 
   return (
     <div style={{ position: 'relative' }}>
+      {/* Background: DotGrid is the default. To use Vanta + three instead, add `three` and `vanta`
+          to package.json, then in a useEffect with a ref on this container call dynamic import()
+          (e.g. await import('three'); await import('vanta/dist/vanta.net.min')) so those deps stay
+          in an async chunk — do not add static top-level imports in this module. */}
       <div style={{ position: 'absolute', top: -32, left: -40, right: -40, height: 260, zIndex: 0, borderRadius: '0 0 16px 16px', overflow: 'hidden', opacity: 0.6 }}>
         <DotGrid />
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: 'linear-gradient(transparent, var(--bg))' }} />
@@ -128,7 +132,7 @@ export default function Dashboard() {
               <p style={{ fontSize: 14, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 {now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                 {deviceId && (
-                  <button onClick={() => { navigator.clipboard.writeText(deviceId); toast.success('Forge ID copied') }}
+                  <button onClick={() => copyWithHistory(deviceId, 'Forge ID copied')}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '2px 8px', cursor: 'pointer', fontFamily: 'var(--font-code)', fontSize: 10, color: 'var(--text-muted)', transition: 'border-color 0.15s' }}
                     onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
                     onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border)'}>

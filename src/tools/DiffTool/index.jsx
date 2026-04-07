@@ -1,11 +1,57 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
+import CodeMirror from '@uiw/react-codemirror'
+import { EditorView } from '@codemirror/view'
+import { javascript } from '@codemirror/lang-javascript'
+import { html } from '@codemirror/lang-html'
+import { css } from '@codemirror/lang-css'
+import { json } from '@codemirror/lang-json'
 import { diffLines, diffWords } from 'diff'
 import { diff as deepDiff, applyChange } from 'deep-diff'
-import { ArrowLeftRight, Upload, Plus, Minus, Edit2, Check, X, Copy, RotateCcw, CheckCheck } from 'lucide-react'
+import { ArrowLeftRight, Upload, Plus, Minus, Edit2, Check, X, Copy, RotateCcw, CheckCheck, Columns2, List } from 'lucide-react'
 import toast from 'react-hot-toast'
 import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 import DropZone from '../../components/DropZone'
+
+const DIFF_CM_THEME = EditorView.theme({
+  '&': { fontSize: '13px' },
+  '.cm-scroller': { fontFamily: 'var(--font-code)' },
+  '.cm-content': { padding: '12px 0' },
+  '.cm-gutters': {
+    backgroundColor: 'var(--bg)',
+    color: 'var(--text-muted)',
+    borderRight: '1px solid var(--border)',
+  },
+  '.cm-activeLineGutter': { backgroundColor: 'transparent' },
+})
+
+const DIFF_INPUT_LANGS = [
+  { id: 'plain', label: 'Plain' },
+  { id: 'json', label: 'JSON' },
+  { id: 'javascript', label: 'JavaScript / TS' },
+  { id: 'html', label: 'HTML' },
+  { id: 'css', label: 'CSS' },
+]
+
+function diffInputExtensions(lang) {
+  const wrap = [EditorView.lineWrapping, DIFF_CM_THEME]
+  switch (lang) {
+    case 'json': return [...wrap, json()]
+    case 'javascript': return [...wrap, javascript({ jsx: true, typescript: true })]
+    case 'html': return [...wrap, html()]
+    case 'css': return [...wrap, css()]
+    default: return wrap
+  }
+}
+
+function splitCellText(line, side) {
+  if (line.type === 'unchanged') return line.text
+  if (line.type === 'added') return side === 'left' ? '' : line.text
+  if (line.type === 'removed') return side === 'left' ? line.text : ''
+  if (line.type === 'changed') return side === 'left' ? line.oldText : line.newText
+  return ''
+}
 
 function flattenPath(path) {
   return path ? path.join('.') : '(root)'
@@ -47,8 +93,12 @@ export default function DiffTool() {
   const [mode, setMode] = useCloudState('diff-mode', 'text')
   const [left, setLeft] = useCloudState('diff-left', '')
   const [right, setRight] = useCloudState('diff-right', '')
+  const [textLayout, setTextLayout] = useCloudState('diff-text-layout', 'unified')
+  const [diffInputLang, setDiffInputLang] = useCloudState('diff-input-lang', 'plain')
   const leftFileRef = useRef(null)
   const rightFileRef = useRef(null)
+
+  const diffCmExtensions = useMemo(() => diffInputExtensions(diffInputLang), [diffInputLang])
 
   const swap = useCallback(() => {
     setLeft((l) => { setRight(l); return right })
@@ -274,6 +324,30 @@ export default function DiffTool() {
         </div>
       </ToolHeader>
 
+      {mode === 'text' && (
+        <div className="forge-card mb-3" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Editor language</span>
+          <select
+            value={diffInputLang}
+            onChange={(e) => setDiffInputLang(e.target.value)}
+            style={{
+              padding: '6px 10px',
+              borderRadius: 6,
+              border: '1px solid var(--border)',
+              background: 'var(--bg)',
+              color: 'var(--text)',
+              fontSize: 12,
+              fontFamily: 'var(--font-ui)',
+            }}
+          >
+            {DIFF_INPUT_LANGS.map((l) => (
+              <option key={l.id} value={l.id}>{l.label}</option>
+            ))}
+          </select>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', opacity: 0.75 }}>Syntax highlighting for the Original / Modified editors</span>
+        </div>
+      )}
+
       <div className="flex gap-3 items-stretch mb-4">
         <div className="flex-1 forge-card" style={{ padding: 0, display: 'flex', flexDirection: 'column' }}>
           <div className="flex items-center justify-between" style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
@@ -289,9 +363,15 @@ export default function DiffTool() {
             accept={DIFF_ACCEPT}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
           >
-            <textarea value={left} onChange={(e) => setLeft(e.target.value)} rows={14}
-              className="w-full flex-1 outline-none" style={{ ...inputStyle, border: 'none', borderRadius: 0 }}
-              placeholder="Paste original content..." />
+            <CodeMirror
+              value={left}
+              height="280px"
+              extensions={diffCmExtensions}
+              onChange={(v) => setLeft(v)}
+              placeholder="Paste original content..."
+              className="w-full flex-1 outline-none"
+              style={{ border: 'none', borderRadius: 0 }}
+            />
           </DropZone>
         </div>
 
@@ -317,37 +397,55 @@ export default function DiffTool() {
             accept={DIFF_ACCEPT}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
           >
-            <textarea value={right} onChange={(e) => setRight(e.target.value)} rows={14}
-              className="w-full flex-1 outline-none" style={{ ...inputStyle, border: 'none', borderRadius: 0 }}
-              placeholder="Paste modified content..." />
+            <CodeMirror
+              value={right}
+              height="280px"
+              extensions={diffCmExtensions}
+              onChange={(v) => setRight(v)}
+              placeholder="Paste modified content..."
+              className="w-full flex-1 outline-none"
+              style={{ border: 'none', borderRadius: 0 }}
+            />
           </DropZone>
         </div>
       </div>
 
       {/* Diff output */}
       <div className="forge-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 16 }}>
-        <div className="flex items-center justify-between" style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between flex-wrap gap-2" style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
           <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Diff Output</span>
-          {mode === 'text' && left && right && (
-            <div className="flex gap-2">
-              <button onClick={acceptAll} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>
-                <CheckCheck size={12} /> Accept All
-              </button>
-              <button onClick={() => { setDecisions({}); setManualMerge(left); setShowMerge(true) }} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>
-                <RotateCcw size={12} /> Use Original
-              </button>
-            </div>
-          )}
-          {mode === 'json' && jsonDiffResult && !jsonDiffResult.error && jsonDiffResult.changes.length > 0 && (
-            <div className="flex gap-2">
-              <button onClick={acceptAllJson} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>
-                <CheckCheck size={12} /> Accept All
-              </button>
-              <button onClick={() => { setJsonDecisions({}); setShowJsonMerge(false) }} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>
-                <RotateCcw size={12} /> Reset
-              </button>
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {mode === 'text' && left && right && (
+              <div className="tab-pills">
+                <button type="button" className={`tab-pill ${textLayout === 'unified' ? 'active' : ''}`} onClick={() => setTextLayout('unified')}>
+                  <List size={12} /> Unified
+                </button>
+                <button type="button" className={`tab-pill ${textLayout === 'split' ? 'active' : ''}`} onClick={() => setTextLayout('split')}>
+                  <Columns2 size={12} /> Split
+                </button>
+              </div>
+            )}
+            {mode === 'text' && left && right && (
+              <div className="flex gap-2">
+                <button type="button" onClick={acceptAll} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>
+                  <CheckCheck size={12} /> Accept All
+                </button>
+                <button type="button" onClick={() => { setDecisions({}); setManualMerge(left); setShowMerge(true) }} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>
+                  <RotateCcw size={12} /> Use Original
+                </button>
+              </div>
+            )}
+            {mode === 'json' && jsonDiffResult && !jsonDiffResult.error && jsonDiffResult.changes.length > 0 && (
+              <div className="flex gap-2">
+                <button type="button" onClick={acceptAllJson} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>
+                  <CheckCheck size={12} /> Accept All
+                </button>
+                <button type="button" onClick={() => { setJsonDecisions({}); setShowJsonMerge(false) }} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>
+                  <RotateCcw size={12} /> Reset
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <div className="overflow-auto" style={{ maxHeight: 420, fontFamily: 'var(--font-code)', fontSize: 13 }}>
           {(!left && !right) ? (
@@ -355,6 +453,62 @@ export default function DiffTool() {
               Enter content on both sides to see the diff
             </div>
           ) : mode === 'text' ? (
+            textLayout === 'split' ? (
+            diffLines2.map((line, i) => {
+              const isAdded = line.type === 'added'
+              const isRemoved = line.type === 'removed'
+              const isChanged = line.type === 'changed'
+              const dec = decisions[i]
+              const isDecided = dec !== undefined
+              const leftT = splitCellText(line, 'left')
+              const rightT = splitCellText(line, 'right')
+              return (
+                <div key={i} className="flex" style={{
+                  alignItems: 'stretch',
+                  background: isDecided
+                    ? 'color-mix(in srgb, var(--accent) 6%, transparent)'
+                    : (isAdded || isChanged ? 'rgba(34,197,94,0.06)' : isRemoved ? 'rgba(239,68,68,0.06)' : (i % 2 === 0 ? 'var(--surface-hover)' : 'transparent')),
+                  borderLeft: `3px solid ${isDecided ? 'var(--accent)' : (isAdded || isChanged ? '#22C55E' : isRemoved ? '#EF4444' : 'transparent')}`,
+                  minHeight: 28,
+                  opacity: isDecided ? 0.7 : 1,
+                }}>
+                  <span style={{ width: 36, textAlign: 'right', padding: '4px 6px', color: 'var(--text-muted)', opacity: 0.45, fontSize: 11, flexShrink: 0, userSelect: 'none', borderRight: '1px solid var(--border)' }}>{i + 1}</span>
+                  <div style={{ flex: 1, minWidth: 0, padding: '4px 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', borderRight: '1px solid var(--border)', color: isRemoved ? '#EF4444' : (isChanged ? '#EF4444' : 'var(--text)') }}>
+                    {leftT || '\u00a0'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0, padding: '4px 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', borderRight: '1px solid var(--border)', color: isAdded ? '#22C55E' : (isChanged ? '#22C55E' : 'var(--text)') }}>
+                    {rightT || '\u00a0'}
+                  </div>
+                  <div style={{ width: 88, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    {(isAdded || isChanged) && !isDecided && (
+                      <button type="button" onClick={() => decideLine(i, 'accepted')} title="Accept this change"
+                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: '0 4px', flexShrink: 0, opacity: 0.6 }}>
+                        <Check size={13} />
+                      </button>
+                    )}
+                    {(isAdded || isChanged) && !isDecided && (
+                      <button type="button" onClick={() => decideLine(i, 'rejected')} title="Reject this change"
+                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: '0 2px', flexShrink: 0, opacity: 0.6 }}>
+                        <X size={13} />
+                      </button>
+                    )}
+                    {isRemoved && !isDecided && (
+                      <button type="button" onClick={() => decideLine(i, 'accepted')} title="Keep this removed line"
+                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: '0 4px', flexShrink: 0, opacity: 0.6 }}>
+                        <Plus size={13} />
+                      </button>
+                    )}
+                    {isRemoved && !isDecided && (
+                      <button type="button" onClick={() => decideLine(i, 'rejected')} title="Drop this line"
+                        className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: '0 2px', flexShrink: 0, opacity: 0.6 }}>
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+            ) : (
             diffLines2.map((line, i) => {
               const isAdded = line.type === 'added'
               const isRemoved = line.type === 'removed'
@@ -384,25 +538,25 @@ export default function DiffTool() {
                     )}
                   </span>
                   {(isAdded || isChanged) && !isDecided && (
-                    <button onClick={() => decideLine(i, 'accepted')} title="Accept this change"
+                    <button type="button" onClick={() => decideLine(i, 'accepted')} title="Accept this change"
                       className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: '0 8px', flexShrink: 0, opacity: 0.6 }}>
                       <Check size={13} />
                     </button>
                   )}
                   {(isAdded || isChanged) && !isDecided && (
-                    <button onClick={() => decideLine(i, 'rejected')} title="Reject this change"
+                    <button type="button" onClick={() => decideLine(i, 'rejected')} title="Reject this change"
                       className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: '0 4px 0 0', flexShrink: 0, opacity: 0.6 }}>
                       <X size={13} />
                     </button>
                   )}
                   {isRemoved && !isDecided && (
-                    <button onClick={() => decideLine(i, 'accepted')} title="Keep this removed line"
+                    <button type="button" onClick={() => decideLine(i, 'accepted')} title="Keep this removed line"
                       className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#22C55E', padding: '0 8px', flexShrink: 0, opacity: 0.6 }}>
                       <Plus size={13} />
                     </button>
                   )}
                   {isRemoved && !isDecided && (
-                    <button onClick={() => decideLine(i, 'rejected')} title="Drop this line"
+                    <button type="button" onClick={() => decideLine(i, 'rejected')} title="Drop this line"
                       className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#EF4444', padding: '0 4px 0 0', flexShrink: 0, opacity: 0.6 }}>
                       <X size={13} />
                     </button>
@@ -410,6 +564,7 @@ export default function DiffTool() {
                 </div>
               )
             })
+            )
           ) : (
             jsonDiffResult?.error ? (
               <div className="py-6 px-5" style={{ color: '#EF4444', fontSize: 13 }}>JSON parse error: {jsonDiffResult.error}</div>
@@ -449,7 +604,7 @@ export default function DiffTool() {
               <span style={{ opacity: 0.5, marginLeft: 8 }}>({Object.keys(jsonDecisions).length} decision{Object.keys(jsonDecisions).length !== 1 ? 's' : ''})</span>
             </span>
             <div className="flex gap-2">
-              <button onClick={() => { navigator.clipboard.writeText(mergedJson); toast.success('Copied') }} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>
+              <button onClick={() => copyWithHistory(mergedJson)} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>
                 <Copy size={12} /> Copy
               </button>
               <button onClick={() => setShowJsonMerge(false)} className="forge-btn" style={{ padding: '4px 8px' }}>
@@ -470,7 +625,7 @@ export default function DiffTool() {
               {hasAnyDecision && <span style={{ opacity: 0.5, marginLeft: 8 }}>({Object.keys(decisions).length} decision{Object.keys(decisions).length !== 1 ? 's' : ''})</span>}
             </span>
             <div className="flex gap-2">
-              <button onClick={() => { navigator.clipboard.writeText(manualMerge || merged); toast.success('Copied') }} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>
+              <button onClick={() => copyWithHistory(manualMerge || merged)} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>
                 <Copy size={12} /> Copy
               </button>
               <button onClick={resetMerge} className="forge-btn" style={{ padding: '4px 10px', fontSize: 11 }}>

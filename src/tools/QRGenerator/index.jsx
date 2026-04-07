@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { QRCodeSVG } from 'qrcode.react'
 import { BrowserMultiFormatReader } from '@zxing/library'
 import {
@@ -10,6 +11,7 @@ import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
 import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 
 const EC_LEVELS = ['L', 'M', 'Q', 'H']
 const FORMATS = ['QR Code', 'Code128', 'Code39', 'EAN-13', 'EAN-8', 'UPC-A']
@@ -385,7 +387,7 @@ function ReadPanel({ onSave }) {
                     borderRadius: '0 var(--radius) var(--radius) 0', padding: '14px 48px 14px 16px',
                     color: 'var(--text)', fontFamily: 'var(--font-code)', fontSize: 13,
                   }} />
-                <button onClick={() => { navigator.clipboard.writeText(result); toast.success('Copied') }}
+                <button onClick={() => copyWithHistory(result)}
                   className="absolute top-3 right-3 cursor-pointer" style={{ background: 'none', border: 'none', color: 'var(--text-muted)' }}>
                   <Copy size={16} />
                 </button>
@@ -403,7 +405,17 @@ function ReadPanel({ onSave }) {
   )
 }
 
+const SAVED_QR_ROW_H = 78
+
 function SavedList({ items, onDelete, onQuickFill }) {
+  const parentRef = useRef(null)
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => SAVED_QR_ROW_H,
+    overscan: 8,
+  })
+
   return (
     <div className="forge-card" style={{ marginTop: 16, padding: 0, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
@@ -412,37 +424,56 @@ function SavedList({ items, onDelete, onQuickFill }) {
         </span>
         <span style={{ fontSize: 11, color: 'var(--text-muted)', opacity: 0.6 }}>{items.length} item{items.length !== 1 ? 's' : ''}</span>
       </div>
-      <div>
-        {items.map((item, i) => (
-          <div key={item.id} style={{
-            display: 'flex', alignItems: 'center', gap: 14, padding: '12px 20px',
-            borderBottom: i < items.length - 1 ? '1px solid var(--border)' : 'none',
-            background: i % 2 === 0 ? 'transparent' : 'var(--surface-hover)',
-          }}>
-            <div style={{ flexShrink: 0, background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 6, border: '1px solid var(--border)' }}>
-              <QRCodeSVG value={item.text} size={44} level={item.ecLevel || 'M'} fgColor={item.fgColor || '#FFFFFF'} bgColor={item.bgColor || '#0A0A0F'} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {item.label}
+      <div ref={parentRef} style={{ maxHeight: 420, overflow: 'auto' }}>
+        <div style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
+          {virtualizer.getVirtualItems().map((vi) => {
+            const item = items[vi.index]
+            const stripe = vi.index % 2 === 0 ? 'transparent' : 'var(--surface-hover)'
+            return (
+              <div
+                key={item.id}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: vi.size,
+                  transform: `translateY(${vi.start}px)`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                  padding: '12px 20px',
+                  boxSizing: 'border-box',
+                  borderBottom: '1px solid var(--border)',
+                  background: stripe,
+                }}
+              >
+                <div style={{ flexShrink: 0, background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 6, border: '1px solid var(--border)' }}>
+                  <QRCodeSVG value={item.text} size={44} level={item.ecLevel || 'M'} fgColor={item.fgColor || '#FFFFFF'} bgColor={item.bgColor || '#0A0A0F'} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {item.label}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-code)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
+                    {item.text}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  <button type="button" onClick={() => onQuickFill(item)} className="forge-btn" style={{ padding: '5px 10px', fontSize: 11 }} title="Load into generator">
+                    <Play size={11} /> Fill
+                  </button>
+                  <button type="button" onClick={() => copyWithHistory(item.text)} className="forge-btn" style={{ padding: '5px 8px' }} title="Copy text">
+                    <Copy size={11} />
+                  </button>
+                  <button type="button" onClick={() => onDelete(item.id)} className="forge-btn" style={{ padding: '5px 8px', color: '#EF4444' }} title="Delete">
+                    <Trash2 size={11} />
+                  </button>
+                </div>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-code)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
-                {item.text}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-              <button onClick={() => onQuickFill(item)} className="forge-btn" style={{ padding: '5px 10px', fontSize: 11 }} title="Load into generator">
-                <Play size={11} /> Fill
-              </button>
-              <button onClick={() => { navigator.clipboard.writeText(item.text); toast.success('Copied') }} className="forge-btn" style={{ padding: '5px 8px' }} title="Copy text">
-                <Copy size={11} />
-              </button>
-              <button onClick={() => onDelete(item.id)} className="forge-btn" style={{ padding: '5px 8px', color: '#EF4444' }} title="Delete">
-                <Trash2 size={11} />
-              </button>
-            </div>
-          </div>
-        ))}
+            )
+          })}
+        </div>
       </div>
     </div>
   )

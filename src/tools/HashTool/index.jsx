@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Copy, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import ToolHeader from '../../components/ToolHeader'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 import DropZone from '../../components/DropZone'
 
 function md5(str) {
@@ -114,7 +115,7 @@ export default function HashTool() {
     }
   }, [input, computeHashes])
 
-  const copyText = (t) => { navigator.clipboard.writeText(t); toast.success('Copied') }
+  const copyText = (t) => { copyWithHistory(t) }
 
   const formatBytes = (bytes) => {
     if (bytes < 1024) return `${bytes} B`

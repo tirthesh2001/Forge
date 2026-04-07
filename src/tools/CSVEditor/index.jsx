@@ -7,6 +7,7 @@ import {
 import toast from 'react-hot-toast'
 import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 import DropZone from '../../components/DropZone'
 
 const FIRST_NAMES = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Hank', 'Ivy', 'Jack']
@@ -108,8 +109,13 @@ export default function CSVEditor() {
   const deleteColumn = useCallback((idx) => { setHeaders((prev) => prev.filter((_, i) => i !== idx)); setRows((prev) => prev.map((r) => r.filter((_, i) => i !== idx))); if (sortCol === idx) setSortCol(null) }, [sortCol])
 
   const downloadCSV = useCallback(() => { const csv = Papa.unparse([headers, ...rows]); const b = new Blob([csv], { type: 'text/csv' }); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = 'data.csv'; a.click(); URL.revokeObjectURL(u); toast.success('CSV downloaded') }, [headers, rows])
-  const copyTSV = useCallback(() => { navigator.clipboard.writeText([headers.join('\t'), ...rows.map((r) => r.join('\t'))].join('\n')); toast.success('Copied as TSV') }, [headers, rows])
-  const copyJSON = useCallback(() => { const arr = rows.map((r) => { const obj = {}; headers.forEach((h, i) => { obj[h] = r[i] ?? '' }); return obj }); navigator.clipboard.writeText(JSON.stringify(arr, null, 2)); toast.success('Copied as JSON') }, [headers, rows])
+  const copyTSV = useCallback(() => {
+    copyWithHistory([headers.join('\t'), ...rows.map((r) => r.join('\t'))].join('\n'), 'Copied as TSV')
+  }, [headers, rows])
+  const copyJSON = useCallback(() => {
+    const arr = rows.map((r) => { const obj = {}; headers.forEach((h, i) => { obj[h] = r[i] ?? '' }); return obj })
+    copyWithHistory(JSON.stringify(arr, null, 2), 'Copied as JSON')
+  }, [headers, rows])
 
   const generateDummy = useCallback(() => {
     setHeaders(genCols.map((c) => c.name))

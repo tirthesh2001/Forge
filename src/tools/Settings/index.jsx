@@ -4,7 +4,8 @@ import toast from 'react-hot-toast'
 import { useDeviceId } from '../../contexts/DeviceContext'
 import { useTheme } from '../../contexts/ThemeContext'
 import { supabase } from '../../lib/supabase'
-import useCloudState from '../../hooks/useCloudState'
+import useCloudState, { FORGE_STORAGE_IMPORT } from '../../hooks/useCloudState'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 import ToolHeader from '../../components/ToolHeader'
 
 const SHORTCUT_TOOLS = [
@@ -277,7 +278,8 @@ export default function Settings() {
           }
         }
       }
-      toast.success(`Imported ${count} items. Refresh to see changes.`)
+      window.dispatchEvent(new CustomEvent(FORGE_STORAGE_IMPORT))
+      toast.success(`Imported ${count} item${count !== 1 ? 's' : ''}.`)
     } catch { toast.error('Invalid backup file') }
     e.target.value = ''
   }, [deviceId])
@@ -290,8 +292,9 @@ export default function Settings() {
     }
     keys.forEach((k) => localStorage.removeItem(k))
     if (deviceId) { await supabase.from('forge_data').delete().eq('device_id', deviceId) }
+    window.dispatchEvent(new CustomEvent(FORGE_STORAGE_IMPORT))
     setShowReset(false)
-    toast.success('All data cleared. Refresh to see changes.')
+    toast.success('All data cleared.')
   }, [deviceId])
 
   const btnStyle = {
@@ -314,7 +317,7 @@ export default function Settings() {
           <div style={{ flex: 1, minWidth: 200, padding: '12px 16px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontFamily: 'var(--font-code)', fontSize: 15, color: 'var(--accent)', letterSpacing: '0.05em' }}>
             {deviceId || 'Not set'}
           </div>
-          <button onClick={() => { navigator.clipboard.writeText(deviceId); toast.success('Copied') }} className="forge-btn" style={{ padding: '10px 14px' }}>
+          <button onClick={() => copyWithHistory(deviceId)} className="forge-btn" style={{ padding: '10px 14px' }}>
             <Copy size={14} /> Copy
           </button>
         </div>
@@ -383,7 +386,7 @@ export default function Settings() {
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>Share your Forge ID with someone else so they can import your saved data. They can enter your ID in the Forge ID field to sync your data.</p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={() => { if (deviceId) { navigator.clipboard.writeText(deviceId); toast.success('Forge ID copied! Share it with others.') } }} className="forge-btn" style={{ padding: '10px 16px', fontSize: 13 }}>
+          <button onClick={() => { if (deviceId) copyWithHistory(deviceId, 'Forge ID copied! Share it with others.') }} className="forge-btn" style={{ padding: '10px 16px', fontSize: 13 }}>
             <Copy size={14} /> Copy Forge ID to Share
           </button>
           <button onClick={exportData} className="forge-btn" style={{ padding: '10px 16px', fontSize: 13 }}>

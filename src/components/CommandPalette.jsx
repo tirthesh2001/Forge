@@ -4,8 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   QrCode, Braces, GitCompare, Table, Palette, KeyRound, Video,
   FileCode2, Clock, Hash, Regex, FileText, Search, Settings, Home,
-  Image, Send,
+  Image, Send, Clipboard,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { useClipboardHistory } from '../contexts/ClipboardHistoryContext'
 
 const COMMANDS = [
   { id: 'home', label: 'Dashboard', desc: 'Go to home', icon: Home, action: 'nav', path: '/' },
@@ -26,21 +28,46 @@ const COMMANDS = [
   { id: 'settings', label: 'Settings', desc: 'Export, import, themes, shortcuts', icon: Settings, action: 'nav', path: '/settings' },
 ]
 
+function palettePreview(text, max = 52) {
+  const one = text.replace(/\s+/g, ' ').trim()
+  if (one.length <= max) return one
+  return `${one.slice(0, max)}…`
+}
+
 export default function CommandPalette({ open, onClose }) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const inputRef = useRef(null)
   const navigate = useNavigate()
+  const { items: clipItems, copyAgain } = useClipboardHistory()
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return COMMANDS
-    const q = query.toLowerCase()
-    return COMMANDS.filter((c) =>
+    const q = query.trim().toLowerCase()
+    const clipCommands = clipItems.map((text, i) => ({
+      id: `clip-${i}`,
+      label: `Clipboard: ${palettePreview(text, 56)}`,
+      desc: `${text.length} chars — copy again`,
+      icon: Clipboard,
+      action: 'clipboard',
+      text,
+    })).filter((c) =>
+      !q ||
       c.label.toLowerCase().includes(q) ||
-      c.desc.toLowerCase().includes(q) ||
-      c.id.includes(q)
+      c.text.toLowerCase().includes(q),
     )
-  }, [query])
+
+    const nav = COMMANDS.filter((c) => {
+      if (!q) return true
+      return c.label.toLowerCase().includes(q) ||
+        c.desc.toLowerCase().includes(q) ||
+        c.id.includes(q)
+    })
+
+    if (!q) return [...clipCommands.slice(0, 8), ...nav]
+    return [...clipCommands, ...nav].slice(0, 50)
+  }, [query, clipItems])
+
+  const safeSelected = filtered.length === 0 ? 0 : Math.min(selected, filtered.length - 1)
 
   useEffect(() => {
     if (open) {
@@ -51,16 +78,22 @@ export default function CommandPalette({ open, onClose }) {
   }, [open])
 
   const execute = useCallback((cmd) => {
+    if (cmd.action === 'clipboard') {
+      copyAgain(cmd.text)
+      toast.success('Copied')
+      onClose()
+      return
+    }
     if (cmd.action === 'nav') navigate(cmd.path)
     onClose()
-  }, [navigate, onClose])
+  }, [navigate, onClose, copyAgain])
 
   const onKeyDown = useCallback((e) => {
     if (e.key === 'Escape') { onClose(); return }
-    if (e.key === 'ArrowDown') { e.preventDefault(); setSelected((s) => Math.min(s + 1, filtered.length - 1)) }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSelected((s) => Math.min(s + 1, Math.max(0, filtered.length - 1))) }
     if (e.key === 'ArrowUp') { e.preventDefault(); setSelected((s) => Math.max(s - 1, 0)) }
-    if (e.key === 'Enter' && filtered[selected]) { execute(filtered[selected]) }
-  }, [filtered, selected, execute, onClose])
+    if (e.key === 'Enter' && filtered[safeSelected]) { execute(filtered[safeSelected]) }
+  }, [filtered, safeSelected, execute, onClose])
 
   if (!open) return null
 
@@ -107,13 +140,13 @@ export default function CommandPalette({ open, onClose }) {
                 onMouseEnter={() => setSelected(i)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 16px',
-                  background: i === selected ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent',
+                  background: i === safeSelected ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent',
                   border: 'none', cursor: 'pointer', textAlign: 'left', transition: 'background 0.1s',
                 }}
               >
-                <cmd.icon size={16} style={{ color: i === selected ? 'var(--accent)' : 'var(--text-muted)', flexShrink: 0 }} />
+                <cmd.icon size={16} style={{ color: i === safeSelected ? 'var(--accent)' : 'var(--text-muted)', flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: i === selected ? 'var(--text)' : 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>{cmd.label}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: i === safeSelected ? 'var(--text)' : 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>{cmd.label}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', opacity: 0.6, marginTop: 1 }}>{cmd.desc}</div>
                 </div>
                 {cmd.shortcut && (

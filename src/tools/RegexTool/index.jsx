@@ -3,6 +3,7 @@ import { Copy, ChevronDown, ChevronUp, Bookmark, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 
 const CHEATSHEET = [
   { cat: 'Basics', items: ['.  Any character', '\\d  Digit [0-9]', '\\w  Word char [a-zA-Z0-9_]', '\\s  Whitespace', '\\b  Word boundary'] },
@@ -68,10 +69,10 @@ export default function RegexTool() {
   const saveRegex = useCallback(() => {
     if (!pattern) { toast.error('Enter a pattern first'); return }
     const entry = { id: Date.now().toString(), name: saveName || pattern, pattern, flags: flagStr, createdAt: new Date().toISOString() }
-    setSavedRegex([entry, ...savedRegex])
+    setSavedRegex((prev) => [entry, ...prev])
     setSaveName('')
     toast.success('Regex saved')
-  }, [pattern, flagStr, saveName, savedRegex])
+  }, [pattern, flagStr, saveName, setSavedRegex])
 
   const loadRegex = useCallback((item) => {
     setPattern(item.pattern)
@@ -82,9 +83,9 @@ export default function RegexTool() {
   }, [])
 
   const deleteRegex = useCallback((id) => {
-    setSavedRegex(savedRegex.filter((r) => r.id !== id))
+    setSavedRegex((prev) => prev.filter((r) => r.id !== id))
     toast.success('Deleted')
-  }, [savedRegex])
+  }, [setSavedRegex])
 
   return (
     <div>
@@ -199,7 +200,7 @@ export default function RegexTool() {
                   <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', marginBottom: 2 }}>{r.name}</div>
                   <div style={{ fontSize: 11, fontFamily: 'var(--font-code)', color: 'var(--text-muted)' }}>/{r.pattern}/{r.flags}</div>
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(r.pattern); toast.success('Copied') }}
+                <button onClick={(e) => { e.stopPropagation(); copyWithHistory(r.pattern) }}
                   style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}><Copy size={12} /></button>
                 <button onClick={(e) => { e.stopPropagation(); deleteRegex(r.id) }}
                   style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}><Trash2 size={12} /></button>

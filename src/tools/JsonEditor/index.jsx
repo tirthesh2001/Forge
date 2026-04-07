@@ -9,6 +9,7 @@ import {
 import toast from 'react-hot-toast'
 import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 import DropZone from '../../components/DropZone'
 
 const SAMPLE = `{
@@ -386,7 +387,7 @@ export default function JsonEditor() {
     catch { toast.error('Cannot minify invalid JSON') }
   }, [code, validate, setCode])
 
-  const copyJson = useCallback(() => { navigator.clipboard.writeText(code); toast.success('Copied') }, [code])
+  const copyJson = useCallback(() => { copyWithHistory(code) }, [code])
 
   const clear = useCallback(() => { setCode(''); setParsed(null); setValidation({ valid: true, message: '' }) }, [setCode])
 
@@ -449,8 +450,7 @@ export default function JsonEditor() {
 
   const copyConvert = useCallback(() => {
     if (!convertOutput) return
-    navigator.clipboard.writeText(convertOutput)
-    toast.success('Copied')
+    copyWithHistory(convertOutput)
   }, [convertOutput])
 
   return (

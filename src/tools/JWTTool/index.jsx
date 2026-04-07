@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 
 const ALGORITHMS = ['HS256', 'RS256', 'ES256']
 
@@ -166,8 +167,7 @@ function ClaimRow({ k, v }) {
 }
 
 function copy(text) {
-  navigator.clipboard.writeText(text)
-  toast.success('Copied to clipboard')
+  copyWithHistory(text, 'Copied to clipboard')
 }
 
 export default function JWTTool() {

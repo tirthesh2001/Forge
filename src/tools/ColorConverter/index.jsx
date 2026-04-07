@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { Copy, Bookmark, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
@@ -9,6 +10,7 @@ import {
 } from '../../utils/colorUtils'
 import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
+import { copyWithHistory } from '../../utils/copyWithHistory'
 
 function isValidHex(h) { return /^#[0-9A-Fa-f]{6}$/.test(h) }
 function clamp(v, min, max) { return Math.max(min, Math.min(max, Math.round(Number(v) || 0))) }
@@ -31,6 +33,14 @@ export default function ColorConverter() {
   const [savedColors, setSavedColors] = useCloudState('color-saved', [])
   const [saveName, setSaveName] = useState('')
   const [harmonyTab, setHarmonyTab] = useState('complementary')
+  const savedColorsScrollRef = useRef(null)
+  const savedColorRowH = 58
+  const savedColorsVirtualizer = useVirtualizer({
+    count: savedColors.length,
+    getScrollElement: () => savedColorsScrollRef.current,
+    estimateSize: () => savedColorRowH,
+    overscan: 10,
+  })
 
   const syncFromRgb = useCallback((r, g, b) => {
     r = clamp(r, 0, 255); g = clamp(g, 0, 255); b = clamp(b, 0, 255)
@@ -64,7 +74,7 @@ export default function ColorConverter() {
     }
   }, [hex])
 
-  const copyText = useCallback((text) => { navigator.clipboard.writeText(text); toast.success('Copied') }, [])
+  const copyText = useCallback((text) => { copyWithHistory(text) }, [])
 
   const saveColor = useCallback(() => {
     if (!isValidHex(hex)) return
@@ -190,38 +200,60 @@ export default function ColorConverter() {
           <div className="text-xs font-semibold mb-4" style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Saved Colors
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {savedColors.map((c) => (
-              <div key={c.id}
-                onClick={() => selectColor(c.hex)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
-                  background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)',
-                  cursor: 'pointer', transition: 'border-color 0.15s',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
-                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
-              >
-                <div style={{
-                  width: 32, height: 32, borderRadius: '50%', background: c.hex,
-                  border: '2px solid var(--border)', flexShrink: 0,
-                }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {c.name}
+          <div ref={savedColorsScrollRef} style={{ maxHeight: 320, overflow: 'auto' }}>
+            <div style={{ height: savedColorsVirtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
+              {savedColorsVirtualizer.getVirtualItems().map((vi) => {
+                const c = savedColors[vi.index]
+                return (
+                  <div
+                    key={c.id}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectColor(c.hex) } }}
+                    onClick={() => selectColor(c.hex)}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: vi.size,
+                      transform: `translateY(${vi.start}px)`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '8px 12px',
+                      boxSizing: 'border-box',
+                      background: 'var(--bg)',
+                      borderRadius: 'var(--radius)',
+                      border: '1px solid var(--border)',
+                      cursor: 'pointer',
+                      transition: 'border-color 0.15s',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)' }}
+                  >
+                    <div style={{
+                      width: 32, height: 32, borderRadius: '50%', background: c.hex,
+                      border: '2px solid var(--border)', flexShrink: 0,
+                    }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {c.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-code)' }}>
+                        {c.rgb} &middot; {c.hsl}
+                      </div>
+                    </div>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); copyText(c.hex) }} className="forge-btn" style={{ padding: '4px 8px' }} title="Copy hex">
+                      <Copy size={11} />
+                    </button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); deleteSavedColor(c.id) }} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: 4 }} title="Delete">
+                      <Trash2 size={13} />
+                    </button>
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-code)' }}>
-                    {c.rgb} &middot; {c.hsl}
-                  </div>
-                </div>
-                <button onClick={(e) => { e.stopPropagation(); copyText(c.hex) }} className="forge-btn" style={{ padding: '4px 8px' }} title="Copy hex">
-                  <Copy size={11} />
-                </button>
-                <button onClick={(e) => { e.stopPropagation(); deleteSavedColor(c.id) }} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: 4 }} title="Delete">
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
+                )
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -299,8 +331,7 @@ export default function ColorConverter() {
                 className="forge-btn"
                 style={{ padding: '8px 14px', fontSize: 12 }}
                 onClick={() => {
-                  navigator.clipboard.writeText(formatCssVariables(harmonyHexes))
-                  toast.success('CSS variables copied')
+                  copyWithHistory(formatCssVariables(harmonyHexes), 'CSS variables copied')
                 }}
               >
                 Copy as CSS Variables
@@ -310,8 +341,7 @@ export default function ColorConverter() {
                 className="forge-btn"
                 style={{ padding: '8px 14px', fontSize: 12 }}
                 onClick={() => {
-                  navigator.clipboard.writeText(formatTailwindConfig(harmonyHexes))
-                  toast.success('Tailwind config copied')
+                  copyWithHistory(formatTailwindConfig(harmonyHexes), 'Tailwind config copied')
                 }}
               >
                 Copy as Tailwind Config
