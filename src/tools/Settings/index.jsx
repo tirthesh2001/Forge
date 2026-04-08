@@ -143,7 +143,7 @@ const FAQ_ITEMS = [
   { q: 'How do keyboard shortcuts work?', a: 'Press ⌘ (Cmd/Ctrl) + a number key to quickly navigate to tools. You can customize shortcuts in Settings > Keyboard Shortcuts. Click any key to reassign it.' },
   { q: 'How do I export/import my data?', a: 'Go to Settings > Export Data to download a JSON backup. Use Import Data to restore from a backup file. This works independently of cloud sync.' },
   { q: 'What tools are available?', a: 'QR Tools, JSON Editor (with Schema validation, TypeScript/Go conversion, JSONPath), Diff Tool, CSV Editor, Color Converter (with palette generator), JWT Tool, Meet Quick-Join, Base64, Timestamp Converter, Hash Generator, Regex Tester, Markdown Preview, Image Tool (resize/compress/convert), and API Client (HTTP request builder).' },
-  { q: 'Can I change the theme?', a: 'Yes! Go to Settings > Appearance to choose from theme presets (Default, Solarized, Nord, Dracula), pick from six accent colors or use a custom color picker, and toggle between dark and light modes.' },
+  { q: 'Can I change the theme?', a: 'Yes! Go to Settings > Appearance to choose from theme presets (Default, Catppuccin, Nord), pick from accent colors (including indigo and slate) or use a custom color picker, and toggle between dark and light modes.' },
   { q: 'How do I search or navigate quickly?', a: 'Press ⌘K (or Ctrl+K) to open the Command Palette. Type to search for any tool or action.' },
 ]
 
@@ -227,13 +227,15 @@ function ProfileSection() {
   )
 }
 
+/** Must match keys in ThemeContext ACCENT_COLORS */
 const ACCENT_DOTS = [
-  { name: 'cyan',   dark: '#00D4FF', light: '#0891B2' },
-  { name: 'blue',   dark: '#6366F1', light: '#818CF8' },
-  { name: 'green',  dark: '#22C55E', light: '#16A34A' },
-  { name: 'red',    dark: '#EF4444', light: '#DC2626' },
+  { name: 'indigo', dark: '#818CF8', light: '#4F46E5' },
+  { name: 'blue', dark: '#6366F1', light: '#818CF8' },
+  { name: 'green', dark: '#22C55E', light: '#16A34A' },
+  { name: 'red', dark: '#EF4444', light: '#DC2626' },
   { name: 'yellow', dark: '#EAB308', light: '#CA8A04' },
   { name: 'purple', dark: '#A855F7', light: '#9333EA' },
+  { name: 'slate', dark: '#94A3B8', light: '#475569' },
 ]
 
 export default function Settings() {
@@ -331,7 +333,11 @@ export default function Settings() {
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 10 }}>Theme Preset</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {[{ id: 'default', label: 'Default' }, { id: 'solarized', label: 'Solarized' }, { id: 'nord', label: 'Nord' }, { id: 'dracula', label: 'Dracula' }].map((t) => (
+            {[
+              { id: 'default', label: 'Default' },
+              { id: 'catppuccin', label: 'Catppuccin' },
+              { id: 'nord', label: 'Nord' },
+            ].map((t) => (
               <button key={t.id} onClick={() => setPreset(t.id)}
                 className="forge-btn" style={{ padding: '8px 16px', fontSize: 12, borderColor: preset === t.id ? 'var(--accent)' : 'var(--border)', color: preset === t.id ? 'var(--accent)' : 'var(--text-muted)', fontWeight: preset === t.id ? 600 : 400 }}>
                 {t.label}

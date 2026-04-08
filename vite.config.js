@@ -16,7 +16,7 @@ export default defineConfig({
         description: 'Personal PM & Developer Ops Toolkit',
         start_url: '/',
         display: 'standalone',
-        theme_color: '#00D4FF',
+        theme_color: '#818CF8',
         background_color: '#0A0A0F',
         icons: [
           { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },

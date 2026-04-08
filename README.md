@@ -27,7 +27,7 @@ A fast, offline-capable developer toolkit that bundles essential day-to-day tool
 - **Cloud Sync** - Data persists across devices via Supabase + Forge ID
 - **Command Palette** - Quick navigation with `Cmd+K`
 - **Customizable Shortcuts** - Assign `Cmd+0-9` to any tool
-- **Theming** - Dark/Light modes, 6 accent colors + custom picker, curated themes (Solarized, Nord, Dracula)
+- **Theming** - Dark/Light modes, accent colors + custom picker, curated themes (Default, Catppuccin, Nord)
 - **Drag-and-Drop** - Drop files onto any tool that accepts file input
 - **Export/Import** - Backup and restore all data as JSON
 - **Responsive** - Full mobile support with bottom navigation

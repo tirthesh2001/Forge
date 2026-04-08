@@ -1,12 +1,13 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 
 const ACCENT_COLORS = {
-  cyan:   { dark: '#00D4FF', light: '#0891B2' },
+  indigo: { dark: '#818CF8', light: '#4F46E5' },
   blue:   { dark: '#6366F1', light: '#818CF8' },
   green:  { dark: '#22C55E', light: '#16A34A' },
   red:    { dark: '#EF4444', light: '#DC2626' },
   yellow: { dark: '#EAB308', light: '#CA8A04' },
   purple: { dark: '#A855F7', light: '#9333EA' },
+  slate:  { dark: '#94A3B8', light: '#475569' }
 }
 
 const THEME_PRESETS = {
@@ -20,14 +21,14 @@ const THEME_PRESETS = {
       text: '#1A1D26', textMuted: '#6B7280', dotGrid: '#E2E5EB', btnPrimaryText: '#FFFFFF',
     },
   },
-  solarized: {
+  catppuccin: {
     dark: {
-      bg: '#002B36', surface: '#073642', surfaceHover: '#0a4050', border: '#586E75',
-      text: '#FDF6E3', textMuted: '#839496', dotGrid: '#073642', btnPrimaryText: '#002B36',
+      bg: '#1E1E2E', surface: '#181825', surfaceHover: '#313244', border: '#45475A',
+      text: '#CDD6F4', textMuted: '#7F849C', dotGrid: '#313244', btnPrimaryText: '#1E1E2E',
     },
     light: {
-      bg: '#FDF6E3', surface: '#EEE8D5', surfaceHover: '#E8E1CB', border: '#93A1A1',
-      text: '#002B36', textMuted: '#657B83', dotGrid: '#EEE8D5', btnPrimaryText: '#FDF6E3',
+      bg: '#EFF1F5', surface: '#E6E9EF', surfaceHover: '#CCD0DA', border: '#BCC0CC',
+      text: '#4C4F69', textMuted: '#8C8FA1', dotGrid: '#E6E9EF', btnPrimaryText: '#EFF1F5',
     },
   },
   nord: {
@@ -40,16 +41,6 @@ const THEME_PRESETS = {
       text: '#2E3440', textMuted: '#4C566A', dotGrid: '#D8DEE9', btnPrimaryText: '#ECEFF4',
     },
   },
-  dracula: {
-    dark: {
-      bg: '#282A36', surface: '#383A59', surfaceHover: '#44475A', border: '#6272A4',
-      text: '#F8F8F2', textMuted: '#6272A4', dotGrid: '#383A59', btnPrimaryText: '#282A36',
-    },
-    light: {
-      bg: '#F8F8F2', surface: '#EAEAE6', surfaceHover: '#E0E0DC', border: '#C0C0BC',
-      text: '#282A36', textMuted: '#6272A4', dotGrid: '#EAEAE6', btnPrimaryText: '#F8F8F2',
-    },
-  },
 }
 
 const ThemeContext = createContext()
@@ -59,13 +50,24 @@ export function ThemeProvider({ children }) {
     try { return localStorage.getItem('forge-theme-mode') || 'dark' } catch { return 'dark' }
   })
   const [accentName, setAccentName] = useState(() => {
-    try { return localStorage.getItem('forge-accent') || 'cyan' } catch { return 'cyan' }
+    try {
+      const raw = localStorage.getItem('forge-accent') || 'indigo'
+      // Legacy cyan was removed in favor of indigo; map so saved data and UI stay aligned
+      return raw === 'cyan' ? 'indigo' : raw
+    } catch {
+      return 'indigo'
+    }
   })
   const [customAccent, setCustomAccent] = useState(() => {
     try { return localStorage.getItem('forge-custom-accent') || '' } catch { return '' }
   })
   const [preset, setPreset] = useState(() => {
-    try { return localStorage.getItem('forge-theme-preset') || 'default' } catch { return 'default' }
+    try {
+      const p = localStorage.getItem('forge-theme-preset') || 'default'
+      return THEME_PRESETS[p] ? p : 'default'
+    } catch {
+      return 'default'
+    }
   })
 
   useEffect(() => {
@@ -78,8 +80,8 @@ export function ThemeProvider({ children }) {
 
     const themeColors = THEME_PRESETS[preset]?.[mode] || THEME_PRESETS.default[mode]
     const accent = accentName === 'custom'
-      ? (customAccent || '#00D4FF')
-      : (ACCENT_COLORS[accentName]?.[mode] || ACCENT_COLORS.cyan[mode])
+      ? (customAccent || ACCENT_COLORS.indigo[mode])
+      : (ACCENT_COLORS[accentName]?.[mode] || ACCENT_COLORS.indigo[mode])
 
     const root = document.documentElement
     root.style.setProperty('--bg', themeColors.bg)
