@@ -144,7 +144,7 @@ export default function Dashboard() {
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={shareForge} className="forge-btn" style={{ padding: '10px 14px', fontSize: 13 }}>
-              <Share2 size={15} /> Share
+              <Share2 size={15} />
             </button>
             {!isMobile && (
               <button onClick={installPWA} className="forge-btn forge-btn-primary" style={{ padding: '10px 18px', fontSize: 13 }}>

@@ -290,7 +290,6 @@ export default function APITool() {
   const [responseHeaderEntries, setResponseHeaderEntries] = useState([])
   const [errorMessage, setErrorMessage] = useState(null)
   const [errorClassification, setErrorClassification] = useState(null)
-  const [corsHint, setCorsHint] = useState(false)
   const [timeoutSec, setTimeoutSec] = useState(30)
   const [curlImportOpen, setCurlImportOpen] = useState(false)
   const [curlInput, setCurlInput] = useState('')
@@ -459,7 +458,7 @@ export default function APITool() {
       ? setTimeout(() => controller.abort(), timeoutSec * 1000)
       : null
 
-    setLoading(true); setErrorMessage(null); setErrorClassification(null); setCorsHint(false)
+    setLoading(true); setErrorMessage(null); setErrorClassification(null)
     setStatus(null); setStatusText(''); setResponseTimeMs(null)
     setResponseBody(''); setResponseSize(0); setResponseHeaderEntries([])
     setResponseContentType(''); setResTab('body')
@@ -509,7 +508,6 @@ export default function APITool() {
       const classified = classifyError(err)
       setErrorMessage(classified.title)
       setErrorClassification(classified)
-      setCorsHint(classified.type === 'cors')
       setHistory((prev) => [{ ...snap, id: uid(), sentAt: Date.now(), error: true }, ...prev].slice(0, 50))
     } finally {
       setLoading(false)

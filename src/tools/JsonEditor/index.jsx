@@ -11,6 +11,10 @@ import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
 import { copyWithHistory } from '../../utils/copyWithHistory'
 import DropZone from '../../components/DropZone'
+import ForgeEmptyState from '../../components/ForgeEmptyState'
+import LargeContentBanner from '../../components/LargeContentBanner'
+import { WARN_DOCUMENT_BYTES, JSON_PARSE_WORKER_THRESHOLD } from '../../constants/storageLimits'
+import { workerParseJson } from '../../workers/parserWorkerClient'
 
 const SAMPLE = `{
   "name": "Forge",
@@ -356,6 +360,11 @@ export default function JsonEditor() {
   const convertRef = useRef(null)
 
   const validate = useCallback((val) => {
+    if (!val.trim()) {
+      setValidation({ valid: true, message: '' })
+      setParsed(null)
+      return
+    }
     try {
       const obj = JSON.parse(val)
       setValidation({ valid: true, message: 'Valid JSON' })
@@ -366,7 +375,30 @@ export default function JsonEditor() {
     }
   }, [])
 
-  const handleChange = useCallback((val) => { setCode(val); validate(val) }, [validate, setCode])
+  const handleChange = useCallback((val) => {
+    setCode(val)
+    if (val.length <= JSON_PARSE_WORKER_THRESHOLD) {
+      validate(val)
+    } else {
+      setValidation({ valid: true, message: 'Checking…' })
+    }
+  }, [validate, setCode])
+
+  useEffect(() => {
+    if (code.length <= JSON_PARSE_WORKER_THRESHOLD) return
+    const t = setTimeout(() => {
+      workerParseJson(code)
+        .then(({ parsed }) => {
+          setValidation({ valid: true, message: 'Valid JSON' })
+          setParsed(parsed)
+        })
+        .catch((e) => {
+          setValidation({ valid: false, message: e.message })
+          setParsed(null)
+        })
+    }, 400)
+    return () => clearTimeout(t)
+  }, [code])
 
   const toggleKey = useCallback((key) => {
     setExpandedKeys((prev) => {
@@ -392,7 +424,7 @@ export default function JsonEditor() {
   const clear = useCallback(() => { setCode(''); setParsed(null); setValidation({ valid: true, message: '' }) }, [setCode])
 
   const loadFileText = useCallback((file) => {
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > WARN_DOCUMENT_BYTES) {
       toast('Large file detected. Processing may take a moment.', { icon: '⚠️' })
     }
     const reader = new FileReader()
@@ -453,9 +485,13 @@ export default function JsonEditor() {
     copyWithHistory(convertOutput)
   }, [convertOutput])
 
+  const jsonBannerBytes = useMemo(() => new TextEncoder().encode(code).length, [code])
+
   return (
     <div>
       <ToolHeader toolId="json" title="JSON Editor" description="Edit, validate, format, and explore JSON data" />
+
+      <LargeContentBanner byteSize={jsonBannerBytes} />
 
       <div className="forge-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
         <button type="button" onClick={format} className="forge-btn"><AlignLeft size={13} /> Format</button>
@@ -725,11 +761,21 @@ export default function JsonEditor() {
           <div className="text-xs font-semibold mb-3" style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Tree View
           </div>
-          {parsed !== null ? (
+          {!code.trim() ? (
+            <ForgeEmptyState
+              icon={FileJson}
+              title="No JSON yet"
+              description="Paste or upload a file in the editor, or load the sample to explore the tree."
+              primaryAction={{
+                label: 'Load sample',
+                onClick: () => { setCode(SAMPLE); validate(SAMPLE) },
+              }}
+            />
+          ) : parsed !== null ? (
             <TreeNode value={parsed} expandedKeys={expandedKeys} toggleKey={toggleKey} path="root" />
           ) : (
             <div className="flex items-center justify-center h-full text-sm" style={{ color: 'var(--text-muted)', minHeight: 200 }}>
-              {code ? 'Invalid JSON — fix errors to see tree' : 'Enter JSON to see tree view'}
+              Invalid JSON — fix errors to see tree
             </div>
           )}
         </div>

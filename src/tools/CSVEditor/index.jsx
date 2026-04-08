@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import Papa from 'papaparse'
 import {
   Upload, ClipboardPaste, Download, Copy, Plus, Trash2,
@@ -9,6 +10,8 @@ import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
 import { copyWithHistory } from '../../utils/copyWithHistory'
 import DropZone from '../../components/DropZone'
+import ForgeEmptyState from '../../components/ForgeEmptyState'
+import { WARN_DOCUMENT_BYTES, CSV_VIRTUALIZE_ROW_THRESHOLD } from '../../constants/storageLimits'
 
 const FIRST_NAMES = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Hank', 'Ivy', 'Jack']
 const LAST_NAMES = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Wilson', 'Moore']
@@ -54,7 +57,7 @@ export default function CSVEditor() {
   }, [])
 
   const loadPapaFile = useCallback((file) => {
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > WARN_DOCUMENT_BYTES) {
       toast('Large file detected. Processing may take a moment.', { icon: '⚠️' })
     }
     Papa.parse(file, {
@@ -83,6 +86,16 @@ export default function CSVEditor() {
       return sortAsc ? cmp : -cmp
     })
   }, [rows, sortCol, sortAsc])
+
+  const tableScrollRef = useRef(null)
+  const useRowVirtual = sortedRows.length > CSV_VIRTUALIZE_ROW_THRESHOLD
+  const rowVirtualizer = useVirtualizer({
+    count: sortedRows.length,
+    getScrollElement: () => tableScrollRef.current,
+    estimateSize: () => 37,
+    overscan: 12,
+  })
+  const virtualItems = rowVirtualizer.getVirtualItems()
 
   const handleSort = useCallback((idx) => {
     if (sortCol === idx) setSortAsc((a) => !a)
@@ -130,16 +143,19 @@ export default function CSVEditor() {
       <div>
         <ToolHeader toolId="csv" title="CSV Editor" description="Import, edit, and export CSV data" />
 
-        <div className="forge-card" style={{ padding: '48px 24px' }}>
-          <div className="text-center mb-8">
-            <Table size={36} style={{ color: 'var(--text-muted)', opacity: 0.3, margin: '0 auto 12px' }} />
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No data loaded. Choose an import method to get started.</p>
-          </div>
+        <ForgeEmptyState
+          icon={Table}
+          title="No CSV loaded"
+          description="Import a file, paste from the clipboard, or generate sample rows to edit and export."
+          primaryAction={{ label: 'Upload file', onClick: () => fileInputRef.current?.click() }}
+          secondaryAction={{ label: 'Paste CSV', onClick: () => setPasteModal(true) }}
+        />
+        <div className="forge-card" style={{ padding: '24px', marginTop: 16 }}>
           <DropZone
             onFile={loadPapaFile}
             accept={CSV_ACCEPT}
             label="Drop a CSV file here or click to browse"
-            style={{ marginBottom: 24 }}
+            style={{ marginBottom: 16 }}
           />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, maxWidth: 600, margin: '0 auto' }}>
             <button
@@ -213,7 +229,7 @@ export default function CSVEditor() {
         style={{ display: 'block' }}
       >
         <div className="forge-card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 260px)' }}>
+          <div ref={tableScrollRef} className="overflow-auto" style={{ maxHeight: 'calc(100vh - 260px)' }}>
             <table className="w-full" style={{ borderCollapse: 'collapse', fontFamily: 'var(--font-code)', fontSize: 13 }}>
               <thead>
                 <tr>
@@ -259,29 +275,77 @@ export default function CSVEditor() {
                 </tr>
               </thead>
               <tbody>
-                {sortedRows.map((row, ri) => (
-                  <tr key={ri} className="group" style={{ background: ri % 2 === 0 ? 'var(--surface)' : 'var(--bg)' }}>
-                    <td style={{ borderBottom: '1px solid var(--border)', textAlign: 'center', verticalAlign: 'middle' }}>
-                      <button
-                        onClick={() => deleteRow(ri)}
-                        className="opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
-                        style={{ background: 'none', border: 'none', color: '#EF4444', padding: 2 }}
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </td>
-                    {headers.map((_, ci) => (
-                      <td key={ci} style={{ borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)', padding: 0 }}>
-                        <input
-                          value={row[ci] ?? ''}
-                          onChange={(e) => updateCell(ri, ci, e.target.value)}
-                          className="w-full outline-none"
-                          style={{ background: 'transparent', border: 'none', padding: '8px 14px', color: 'var(--text)', fontFamily: 'var(--font-code)', fontSize: 13 }}
-                        />
-                      </td>
-                    ))}
+                {useRowVirtual && virtualItems.length > 0 && (
+                  <tr aria-hidden="true" style={{ display: 'table-row' }}>
+                    <td colSpan={headers.length + 1} style={{ padding: 0, border: 'none', height: virtualItems[0].start, lineHeight: 0 }} />
                   </tr>
-                ))}
+                )}
+                {useRowVirtual
+                  ? virtualItems.map((vi) => {
+                    const ri = vi.index
+                    const row = sortedRows[ri]
+                    return (
+                      <tr key={vi.key} className="group" style={{ background: ri % 2 === 0 ? 'var(--surface)' : 'var(--bg)' }}>
+                        <td style={{ borderBottom: '1px solid var(--border)', textAlign: 'center', verticalAlign: 'middle' }}>
+                          <button
+                            type="button"
+                            onClick={() => deleteRow(ri)}
+                            className="opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
+                            style={{ background: 'none', border: 'none', color: '#EF4444', padding: 2 }}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </td>
+                        {headers.map((_, ci) => (
+                          <td key={ci} style={{ borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)', padding: 0 }}>
+                            <input
+                              value={row[ci] ?? ''}
+                              onChange={(e) => updateCell(ri, ci, e.target.value)}
+                              className="w-full outline-none"
+                              style={{ background: 'transparent', border: 'none', padding: '8px 14px', color: 'var(--text)', fontFamily: 'var(--font-code)', fontSize: 13 }}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    )
+                  })
+                  : sortedRows.map((row, ri) => (
+                    <tr key={ri} className="group" style={{ background: ri % 2 === 0 ? 'var(--surface)' : 'var(--bg)' }}>
+                      <td style={{ borderBottom: '1px solid var(--border)', textAlign: 'center', verticalAlign: 'middle' }}>
+                        <button
+                          type="button"
+                          onClick={() => deleteRow(ri)}
+                          className="opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
+                          style={{ background: 'none', border: 'none', color: '#EF4444', padding: 2 }}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </td>
+                      {headers.map((_, ci) => (
+                        <td key={ci} style={{ borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)', padding: 0 }}>
+                          <input
+                            value={row[ci] ?? ''}
+                            onChange={(e) => updateCell(ri, ci, e.target.value)}
+                            className="w-full outline-none"
+                            style={{ background: 'transparent', border: 'none', padding: '8px 14px', color: 'var(--text)', fontFamily: 'var(--font-code)', fontSize: 13 }}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                {useRowVirtual && virtualItems.length > 0 && (
+                  <tr aria-hidden="true" style={{ display: 'table-row' }}>
+                    <td
+                      colSpan={headers.length + 1}
+                      style={{
+                        padding: 0,
+                        border: 'none',
+                        height: Math.max(0, rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end),
+                        lineHeight: 0,
+                      }}
+                    />
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

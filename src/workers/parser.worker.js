@@ -1,7 +1,8 @@
 /**
- * Web Worker for parsing large JSON/CSV and simple line diffs off the main thread.
- * Message shape: { type: string, data?: unknown }
+ * Web Worker for parsing large JSON/CSV and line diffs off the main thread.
+ * Message shape: { type, id?, data? }
  */
+import { diffLines } from 'diff'
 
 const LARGE_FILE_HINT = 5 * 1024 * 1024
 
@@ -29,10 +30,7 @@ function parseCSVLine(line) {
   return fields
 }
 
-/**
- * Line-by-line comparison (not a full Myers diff). Each row index is compared in parallel.
- * Output chunks align with common diff UIs: unchanged `value`, or `added` / `removed`.
- */
+/** Line-by-line comparison (not Myers). */
 function diffLinesSimple(left, right) {
   const leftLines = left.split('\n')
   const rightLines = right.split('\n')
@@ -55,19 +53,35 @@ function diffLinesSimple(left, right) {
 }
 
 self.onmessage = function (e) {
-  const { type, data } = e.data || {}
+  const msg = e.data || {}
+  const { type, id, data } = msg
 
   switch (type) {
     case 'parse-json': {
+      const payload = id !== undefined ? data : msg.data
       try {
-        const parsed = JSON.parse(data)
+        const parsed = JSON.parse(typeof payload === 'string' ? payload : '')
         self.postMessage({
           type: 'json-result',
+          id,
           data: parsed,
-          byteLength: typeof data === 'string' ? data.length : undefined,
+          byteLength: typeof payload === 'string' ? payload.length : undefined,
         })
       } catch (err) {
-        self.postMessage({ type: 'json-error', error: err.message })
+        self.postMessage({ type: 'json-error', id, error: err.message })
+      }
+      break
+    }
+
+    case 'diff-lines-myers': {
+      const { left, right } = data || {}
+      const leftStr = typeof left === 'string' ? left : ''
+      const rightStr = typeof right === 'string' ? right : ''
+      try {
+        const result = diffLines(leftStr, rightStr)
+        self.postMessage({ type: 'diff-myers-result', id, data: result })
+      } catch (err) {
+        self.postMessage({ type: 'diff-myers-error', id, error: err.message })
       }
       break
     }
@@ -77,16 +91,17 @@ self.onmessage = function (e) {
       const leftStr = typeof left === 'string' ? left : ''
       const rightStr = typeof right === 'string' ? right : ''
       const changes = diffLinesSimple(leftStr, rightStr)
-      self.postMessage({ type: 'diff-result', data: changes })
+      self.postMessage({ type: 'diff-result', id, data: changes })
       break
     }
 
     case 'parse-csv': {
-      const text = typeof data === 'string' ? data : ''
+      const text = typeof data === 'string' ? data : (typeof msg.data === 'string' ? msg.data : '')
       const lines = text.split(/\r?\n/)
       const result = lines.map((line) => parseCSVLine(line))
       self.postMessage({
         type: 'csv-result',
+        id,
         data: result,
         large: text.length > LARGE_FILE_HINT,
       })
@@ -94,6 +109,6 @@ self.onmessage = function (e) {
     }
 
     default:
-      self.postMessage({ type: 'error', error: `Unknown message type: ${type}` })
+      self.postMessage({ type: 'error', id, error: `Unknown message type: ${type}` })
   }
 }

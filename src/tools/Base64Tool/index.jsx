@@ -5,20 +5,40 @@ import useCloudState from '../../hooks/useCloudState'
 import ToolHeader from '../../components/ToolHeader'
 import { copyWithHistory } from '../../utils/copyWithHistory'
 import DropZone from '../../components/DropZone'
+import { BASE64_LARGE_FILE_BYTES } from '../../constants/storageLimits'
+import formatBytes from '../../utils/formatBytes'
+
+function uint8ToBase64(u8) {
+  let binary = ''
+  const CHUNK = 0x8000
+  for (let i = 0; i < u8.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, u8.subarray(i, i + CHUNK))
+  }
+  return btoa(binary)
+}
 
 export default function Base64Tool() {
   const [mode, setMode] = useCloudState('base64-mode', 'encode')
   const [input, setInput] = useState('')
   const [output, setOutput] = useState('')
   const [fileName, setFileName] = useState('')
+  const [largeEncodeReady, setLargeEncodeReady] = useState(false)
+  const [fullOutputCharCount, setFullOutputCharCount] = useState(0)
   const fileRef = useRef(null)
+  const fullBase64Ref = useRef(null)
 
   const encode = useCallback((text) => {
+    setLargeEncodeReady(false)
+    setFullOutputCharCount(0)
+    fullBase64Ref.current = null
     setInput(text)
     try { setOutput(btoa(unescape(encodeURIComponent(text)))) } catch { setOutput('Error: invalid input') }
   }, [])
 
   const decode = useCallback((text) => {
+    setLargeEncodeReady(false)
+    setFullOutputCharCount(0)
+    fullBase64Ref.current = null
     setInput(text)
     try { setOutput(decodeURIComponent(escape(atob(text.trim())))) } catch { setOutput('Error: invalid Base64') }
   }, [])
@@ -28,23 +48,63 @@ export default function Base64Tool() {
     else decode(text)
   }, [mode, encode, decode])
 
+  const encodeLargeBinary = useCallback(async (file) => {
+    const buf = await file.arrayBuffer()
+    const u8 = new Uint8Array(buf)
+    const b64 = uint8ToBase64(u8)
+    fullBase64Ref.current = b64
+    setFullOutputCharCount(b64.length)
+    setLargeEncodeReady(true)
+    setInput(`[File: ${file.name} — ${formatBytes(file.size)}]`)
+    const head = b64.slice(0, 12_000)
+    setOutput(
+      `${head}${b64.length > 12_000 ? '\n\n… Preview truncated. Use “Download Base64” to save the full encoded file.' : ''}`,
+    )
+    toast.success('Large file encoded — download for the complete Base64')
+  }, [])
+
   const handleFile = useCallback((e) => {
     const file = e.target.files?.[0]
     if (!file) return
     setFileName(file.name)
     const reader = new FileReader()
     if (mode === 'encode') {
+      if (file.size > BASE64_LARGE_FILE_BYTES) {
+        encodeLargeBinary(file)
+        e.target.value = ''
+        return
+      }
       reader.onload = () => {
         const base64 = reader.result.split(',')[1] || ''
+        setLargeEncodeReady(false)
+        setFullOutputCharCount(0)
+        fullBase64Ref.current = null
         setInput(`[File: ${file.name}]`)
         setOutput(base64)
       }
       reader.readAsDataURL(file)
     } else {
+      if (file.size > BASE64_LARGE_FILE_BYTES) {
+        toast('Very large file — decode may be slow or fail in the browser.', { icon: '⚠️' })
+      }
       reader.onload = () => { decode(reader.result) }
       reader.readAsText(file)
     }
-  }, [mode, decode])
+    e.target.value = ''
+  }, [mode, decode, encodeLargeBinary])
+
+  const downloadEncodedBase64 = useCallback(() => {
+    const b64 = fullBase64Ref.current
+    if (!b64) return
+    const blob = new Blob([b64], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(fileName || 'encoded').replace(/\.[^.]+$/, '') || 'encoded'}.b64.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Downloaded')
+  }, [fileName])
 
   const downloadDecoded = useCallback(() => {
     try {
@@ -63,6 +123,9 @@ export default function Base64Tool() {
   const switchMode = useCallback((newMode) => {
     if (newMode === mode) return
     const carry = String(output || '').trim()
+    setLargeEncodeReady(false)
+    setFullOutputCharCount(0)
+    fullBase64Ref.current = null
     setMode(newMode)
     if (carry) {
       if (newMode === 'decode') decode(carry)
@@ -78,6 +141,15 @@ export default function Base64Tool() {
     switchMode(newMode)
   }, [mode, switchMode])
 
+  const onDropFile = useCallback((file) => {
+    setFileName(file.name)
+    if (mode === 'encode' && file.size > BASE64_LARGE_FILE_BYTES) {
+      encodeLargeBinary(file)
+      return
+    }
+    file.text().then((text) => handleInput(text))
+  }, [mode, encodeLargeBinary, handleInput])
+
   const inputStyle = {
     width: '100%', minHeight: 200, background: 'var(--bg)', border: '1px solid var(--border)',
     borderRadius: 'var(--radius)', padding: '14px 16px', color: 'var(--text)',
@@ -88,8 +160,8 @@ export default function Base64Tool() {
     <div>
       <ToolHeader toolId="base64" title="Base64" description="Encode and decode Base64 text and files">
         <div className="tab-pills">
-          <button className={`tab-pill ${mode === 'encode' ? 'active' : ''}`} onClick={() => switchMode('encode')}>Encode</button>
-          <button className={`tab-pill ${mode === 'decode' ? 'active' : ''}`} onClick={() => switchMode('decode')}>Decode</button>
+          <button type="button" className={`tab-pill ${mode === 'encode' ? 'active' : ''}`} onClick={() => switchMode('encode')}>Encode</button>
+          <button type="button" className={`tab-pill ${mode === 'decode' ? 'active' : ''}`} onClick={() => switchMode('decode')}>Decode</button>
         </div>
       </ToolHeader>
 
@@ -98,10 +170,7 @@ export default function Base64Tool() {
           <DropZone
             compact
             accept="*"
-            onFile={(file) => {
-              setFileName(file.name)
-              file.text().then((text) => handleInput(text))
-            }}
+            onFile={onDropFile}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Input</span>
@@ -118,8 +187,11 @@ export default function Base64Tool() {
         <div className="forge-card" style={{ padding: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Output</span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button type="button" onClick={() => copyWithHistory(output)} className="forge-btn" style={{ padding: '3px 8px', fontSize: 11 }}><Copy size={11} /> Copy</button>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => copyWithHistory(largeEncodeReady ? (fullBase64Ref.current || output) : output)} className="forge-btn" style={{ padding: '3px 8px', fontSize: 11 }}><Copy size={11} /> Copy</button>
+              {mode === 'encode' && largeEncodeReady && (
+                <button type="button" onClick={downloadEncodedBase64} className="forge-btn" style={{ padding: '3px 8px', fontSize: 11 }}><Download size={11} /> Base64 file</button>
+              )}
               {mode === 'decode' && (
                 <button type="button" onClick={downloadDecoded} className="forge-btn" style={{ padding: '3px 8px', fontSize: 11 }}><Download size={11} /> File</button>
               )}
@@ -133,8 +205,8 @@ export default function Base64Tool() {
 
       {output && (
         <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-code)' }}>
-          Input: {input.length} chars &middot; Output: {output.length} chars
-          {mode === 'encode' && <span> &middot; ~{Math.ceil(output.length / 1024)} KB</span>}
+          Input: {input.length} chars &middot; Output: {(largeEncodeReady ? fullOutputCharCount : output.length)} chars
+          {mode === 'encode' && <span> &middot; ~{Math.ceil((largeEncodeReady ? fullOutputCharCount : output.length) / 1024)} KB</span>}
         </div>
       )}
     </div>

@@ -15,6 +15,14 @@ import { useTheme } from '../../contexts/ThemeContext'
 import ToolHeader from '../../components/ToolHeader'
 import { copyWithHistory } from '../../utils/copyWithHistory'
 import DropZone from '../../components/DropZone'
+import ForgeEmptyState from '../../components/ForgeEmptyState'
+import LargeContentBanner from '../../components/LargeContentBanner'
+import {
+  WARN_DOCUMENT_BYTES,
+  DIFF_WORKER_CHAR_THRESHOLD,
+  JSON_STRUCTURAL_DIFF_MAX_COMBINED,
+} from '../../constants/storageLimits'
+import { workerDiffLinesMyers } from '../../workers/parserWorkerClient'
 
 /** Light Forge UI: full editor chrome so default syntax highlighting has correct surface contrast */
 const DIFF_CM_THEME_LIGHT = EditorView.theme({
@@ -134,7 +142,7 @@ export default function DiffTool() {
   const loadFile = useCallback((side) => (e) => {
     const file = e.target.files[0]
     if (!file) return
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > WARN_DOCUMENT_BYTES) {
       toast('Large file detected. Processing may take a moment.', { icon: '⚠️' })
     }
     const reader = new FileReader()
@@ -146,32 +154,80 @@ export default function DiffTool() {
   }, [])
 
   const onDropLeftFile = useCallback((file) => {
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > WARN_DOCUMENT_BYTES) {
       toast('Large file detected. Processing may take a moment.', { icon: '⚠️' })
     }
     file.text().then((text) => setLeft(text))
   }, [setLeft])
 
   const onDropRightFile = useCallback((file) => {
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > WARN_DOCUMENT_BYTES) {
       toast('Large file detected. Processing may take a moment.', { icon: '⚠️' })
     }
     file.text().then((text) => setRight(text))
   }, [setRight])
 
-  const textDiffResult = useMemo(() => {
+  const combinedChars = left.length + right.length
+  const useWorkerDiff = combinedChars > DIFF_WORKER_CHAR_THRESHOLD && Boolean(left || right)
+
+  const syncTextDiff = useMemo(() => {
     if (!left && !right) return null
+    if (useWorkerDiff) return null
     return diffLines(left, right)
-  }, [left, right])
+  }, [left, right, useWorkerDiff])
+
+  const [asyncTextDiff, setAsyncTextDiff] = useState(null)
+  const [diffWorkerLoading, setDiffWorkerLoading] = useState(false)
+
+  useEffect(() => {
+    if (!useWorkerDiff) {
+      setAsyncTextDiff(null)
+      setDiffWorkerLoading(false)
+      return
+    }
+    if (!left && !right) {
+      setAsyncTextDiff(null)
+      setDiffWorkerLoading(false)
+      return
+    }
+    let cancelled = false
+    setDiffWorkerLoading(true)
+    setAsyncTextDiff(null)
+    workerDiffLinesMyers(left, right)
+      .then((r) => {
+        if (!cancelled) {
+          setAsyncTextDiff(r)
+          setDiffWorkerLoading(false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAsyncTextDiff(null)
+          setDiffWorkerLoading(false)
+          toast.error('Could not compute diff in worker')
+        }
+      })
+    return () => { cancelled = true }
+  }, [left, right, useWorkerDiff])
+
+  const textDiffResult = useWorkerDiff ? asyncTextDiff : syncTextDiff
 
   const jsonDiffResult = useMemo(() => {
     if (!left && !right) return null
+    if (left.length + right.length > JSON_STRUCTURAL_DIFF_MAX_COMBINED) {
+      return {
+        changes: [],
+        error: null,
+        tooLarge: true,
+        message: 'Combined content is too large for structural JSON diff. Switch to Text mode or use smaller documents.',
+      }
+    }
     try {
       const a = JSON.parse(left)
       const b = JSON.parse(right)
-      return { changes: deepDiff(a, b) || [], error: null }
+      return { changes: deepDiff(a, b) || [], error: null, tooLarge: false }
     } catch (e) {
-      return { changes: [], error: e.message }
+      return { changes: [], error: e.message, tooLarge: false }
     }
   }, [left, right])
 
@@ -186,7 +242,7 @@ export default function DiffTool() {
       })
       return { added, removed, unchanged }
     }
-    if (mode === 'json' && jsonDiffResult && !jsonDiffResult.error) {
+    if (mode === 'json' && jsonDiffResult && !jsonDiffResult.error && !jsonDiffResult.tooLarge) {
       let added = 0, removed = 0, modified = 0
       jsonDiffResult.changes.forEach((c) => {
         if (c.kind === 'N') added++
@@ -274,7 +330,7 @@ export default function DiffTool() {
   }, [])
 
   const mergedJson = useMemo(() => {
-    if (!jsonDiffResult || jsonDiffResult.error || !jsonDiffResult.changes.length) return null
+    if (!jsonDiffResult || jsonDiffResult.error || jsonDiffResult.tooLarge || !jsonDiffResult.changes.length) return null
     try {
       const base = JSON.parse(left)
       jsonDiffResult.changes.forEach((change, i) => {
@@ -285,7 +341,7 @@ export default function DiffTool() {
   }, [left, jsonDiffResult, jsonDecisions])
 
   const acceptAllJson = useCallback(() => {
-    if (!jsonDiffResult) return
+    if (!jsonDiffResult || jsonDiffResult.tooLarge) return
     const d = {}
     jsonDiffResult.changes.forEach((_, i) => { d[i] = 'accepted' })
     setJsonDecisions(d)
@@ -333,6 +389,11 @@ export default function DiffTool() {
     resize: 'none',
   }
 
+  const diffBannerBytes = useMemo(() => {
+    const enc = new TextEncoder()
+    return enc.encode(left).length + enc.encode(right).length
+  }, [left, right])
+
   return (
     <div>
       <ToolHeader toolId="diff" title="Diff Tool" description="Compare text or JSON side by side">
@@ -350,6 +411,8 @@ export default function DiffTool() {
           </div>
         </div>
       </ToolHeader>
+
+      <LargeContentBanner byteSize={diffBannerBytes} />
 
       {mode === 'text' && (
         <div className="forge-card mb-3" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -478,9 +541,14 @@ export default function DiffTool() {
         </div>
         <div className="overflow-auto" style={{ maxHeight: 420, fontFamily: 'var(--font-code)', fontSize: 13 }}>
           {(!left && !right) ? (
-            <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>
-              Enter content on both sides to see the diff
-            </div>
+            <ForgeEmptyState
+              title="Nothing to compare yet"
+              description="Paste or upload text on both Original and Modified. You can compare with only one side filled—results show additions or removals relative to the empty side."
+              primaryAction={{ label: 'Upload to Original', onClick: () => leftFileRef.current?.click() }}
+              secondaryAction={{ label: 'Upload to Modified', onClick: () => rightFileRef.current?.click() }}
+            />
+          ) : mode === 'text' && diffWorkerLoading ? (
+            <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>Computing diff…</div>
           ) : mode === 'text' ? (
             textLayout === 'split' ? (
             diffLines2.map((line, i) => {
@@ -597,7 +665,9 @@ export default function DiffTool() {
             })
             )
           ) : (
-            jsonDiffResult?.error ? (
+            jsonDiffResult?.tooLarge ? (
+              <div className="py-6 px-5" style={{ color: 'var(--text-muted)', fontSize: 13 }}>{jsonDiffResult.message}</div>
+            ) : jsonDiffResult?.error ? (
               <div className="py-6 px-5" style={{ color: '#EF4444', fontSize: 13 }}>JSON parse error: {jsonDiffResult.error}</div>
             ) : jsonDiffResult?.changes.length === 0 ? (
               <div className="py-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>No differences found</div>

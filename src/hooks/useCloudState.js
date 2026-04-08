@@ -1,11 +1,28 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useDeviceId } from '../contexts/DeviceContext'
+import { SOFT_MAX_PERSIST_BYTES } from '../constants/storageLimits'
+import { notifyStorageQuotaExceeded, notifyLargePayloadNotPersisted } from '../utils/storageNotify'
 
 const DEBOUNCE_MS = 500
 
 /** Dispatched after Settings import (or any bulk localStorage write) so hooks re-read their keys. */
 export const FORGE_STORAGE_IMPORT = 'forge-storage-import'
+
+function persistLocalAndReturnIfSynced(key, value) {
+  const serialized = JSON.stringify(value)
+  if (serialized.length > SOFT_MAX_PERSIST_BYTES) {
+    notifyLargePayloadNotPersisted()
+    return false
+  }
+  try {
+    localStorage.setItem(key, serialized)
+    return true
+  } catch {
+    notifyStorageQuotaExceeded()
+    return false
+  }
+}
 
 export default function useCloudState(category, defaultValue) {
   const deviceId = useDeviceId()
@@ -44,10 +61,10 @@ export default function useCloudState(category, defaultValue) {
       .then(({ data, error }) => {
         if (!error && data && mountedRef.current) {
           setValue(data.data)
-          try { localStorage.setItem(localKey, JSON.stringify(data.data)) } catch { /* quota exceeded */ }
+          persistLocalAndReturnIfSynced(localKey, data.data)
         }
       })
-  }, [deviceId, category])
+  }, [deviceId, category, localKey])
 
   useEffect(() => {
     const onImport = () => {
@@ -66,19 +83,31 @@ export default function useCloudState(category, defaultValue) {
   const update = useCallback((valOrFn) => {
     setValue((prev) => {
       const next = typeof valOrFn === 'function' ? valOrFn(prev) : valOrFn
-      try { localStorage.setItem(localKey, JSON.stringify(next)) } catch { /* quota exceeded */ }
+      const serialized = JSON.stringify(next)
+      const underLimit = serialized.length <= SOFT_MAX_PERSIST_BYTES
+
+      if (underLimit) {
+        try {
+          localStorage.setItem(localKey, serialized)
+        } catch {
+          notifyStorageQuotaExceeded()
+        }
+      } else {
+        notifyLargePayloadNotPersisted()
+      }
 
       if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        if (!deviceId) return
-        supabase
-          .from('forge_data')
-          .upsert(
-            { device_id: deviceId, category, data: next, updated_at: new Date().toISOString() },
-            { onConflict: 'device_id,category' }
-          )
-          .then(() => {})
-      }, DEBOUNCE_MS)
+      if (underLimit && deviceId) {
+        timerRef.current = setTimeout(() => {
+          supabase
+            .from('forge_data')
+            .upsert(
+              { device_id: deviceId, category, data: next, updated_at: new Date().toISOString() },
+              { onConflict: 'device_id,category' },
+            )
+            .then(() => {})
+        }, DEBOUNCE_MS)
+      }
 
       return next
     })
