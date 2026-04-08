@@ -107,6 +107,41 @@ body {
   cursor: not-allowed;
 }
 
+/* Prefer these over scattered inline layout/theming in tools (extend as patterns repeat). */
+.forge-text-muted {
+  color: var(--text-muted);
+}
+.forge-label-caps {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.forge-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.forge-input-area {
+  width: 100%;
+  min-height: 120px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  color: var(--text);
+  font-family: var(--font-code);
+  font-size: 13px;
+  resize: vertical;
+  outline: none;
+}
+.forge-code-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-code);
+}
+
 .page-header {
   margin-bottom: 20px;
 }

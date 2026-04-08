@@ -474,8 +474,6 @@ function EncoderPanel() {
   const [secret, setSecret] = useCloudState('jwt-enc-secret', 'your-256-bit-secret')
   const [showSecret, setShowSecret] = useState(false)
   const [output, setOutput] = useCloudState('jwt-last-output', '')
-  const [headerErr, setHeaderErr] = useState(null)
-  const [payloadErr, setPayloadErr] = useState(null)
   const skipClearOutputOnMount = useRef(true)
 
   useEffect(() => {
@@ -503,15 +501,28 @@ function EncoderPanel() {
     setOutput('')
   }, [headerStr, setHeaderStr, setOutput])
 
-  const headerValid = useMemo(() => {
-    try { JSON.parse(headerStr); setHeaderErr(null); return true }
-    catch (e) { setHeaderErr(e.message); return false }
+  const headerParse = useMemo(() => {
+    try {
+      JSON.parse(headerStr)
+      return { valid: true, error: null }
+    } catch (e) {
+      return { valid: false, error: e.message }
+    }
   }, [headerStr])
 
-  const payloadValid = useMemo(() => {
-    try { JSON.parse(payloadStr); setPayloadErr(null); return true }
-    catch (e) { setPayloadErr(e.message); return false }
+  const payloadParse = useMemo(() => {
+    try {
+      JSON.parse(payloadStr)
+      return { valid: true, error: null }
+    } catch (e) {
+      return { valid: false, error: e.message }
+    }
   }, [payloadStr])
+
+  const headerValid = headerParse.valid
+  const payloadValid = payloadParse.valid
+  const headerErr = headerParse.error
+  const payloadErr = payloadParse.error
 
   const generate = useCallback(async () => {
     if (!headerValid || !payloadValid) {

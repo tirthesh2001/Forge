@@ -35,11 +35,21 @@ function palettePreview(text, max = 52) {
 }
 
 export default function CommandPalette({ open, onClose }) {
+  if (!open) return null
+  return <CommandPaletteContent onClose={onClose} />
+}
+
+function CommandPaletteContent({ onClose }) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const inputRef = useRef(null)
   const navigate = useNavigate()
   const { items: clipItems, copyAgain } = useClipboardHistory()
+
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 50)
+    return () => clearTimeout(t)
+  }, [])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -69,14 +79,6 @@ export default function CommandPalette({ open, onClose }) {
 
   const safeSelected = filtered.length === 0 ? 0 : Math.min(selected, filtered.length - 1)
 
-  useEffect(() => {
-    if (open) {
-      setQuery('')
-      setSelected(0)
-      setTimeout(() => inputRef.current?.focus(), 50)
-    }
-  }, [open])
-
   const execute = useCallback((cmd) => {
     if (cmd.action === 'clipboard') {
       copyAgain(cmd.text)
@@ -94,8 +96,6 @@ export default function CommandPalette({ open, onClose }) {
     if (e.key === 'ArrowUp') { e.preventDefault(); setSelected((s) => Math.max(s - 1, 0)) }
     if (e.key === 'Enter' && filtered[safeSelected]) { execute(filtered[safeSelected]) }
   }, [filtered, safeSelected, execute, onClose])
-
-  if (!open) return null
 
   return (
     <AnimatePresence>

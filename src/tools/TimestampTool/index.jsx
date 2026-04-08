@@ -30,10 +30,9 @@ function timeAgo(ts) {
 export default function TimestampTool() {
   const [unixInput, setUnixInput] = useState('')
   const [dateInput, setDateInput] = useState('')
-  const [liveNow, setLiveNow] = useState(null)
+  const [liveNow, setLiveNow] = useState(() => Date.now())
 
   useEffect(() => {
-    setLiveNow(Date.now())
     const t = setInterval(() => setLiveNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
@@ -117,11 +116,11 @@ export default function TimestampTool() {
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Current Time</div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 32, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-code)' }}>{liveNow == null ? '—' : Math.floor(liveNow / 1000)}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-code)' }}>{Math.floor(liveNow / 1000)}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Unix</div>
           </div>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-code)' }}>{liveNow == null ? '—' : new Date(liveNow).toLocaleTimeString()}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-code)' }}>{new Date(liveNow).toLocaleTimeString()}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Local</div>
           </div>
         </div>

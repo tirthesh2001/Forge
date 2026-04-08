@@ -37,6 +37,8 @@ export default defineConfig([
       'react-hooks/immutability': 'warn',
       'react-hooks/static-components': 'warn',
       'react-hooks/exhaustive-deps': 'warn',
+      // TanStack Virtual useVirtualizer is compatible; recommended rule is tuned for React Compiler.
+      'react-hooks/incompatible-library': 'off',
       'react-refresh/only-export-components': 'warn',
     },
   },

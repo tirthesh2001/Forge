@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase'
 import useCloudState, { FORGE_STORAGE_IMPORT } from '../../hooks/useCloudState'
 import { copyWithHistory } from '../../utils/copyWithHistory'
 import ToolHeader from '../../components/ToolHeader'
+import { ACCENT_SWATCHES, THEME_PRESET_OPTIONS } from '../../theme/forgeThemeConfig'
 
 const SHORTCUT_TOOLS = [
   { key: '1', label: 'QR Tools', path: '/qr' },
@@ -227,17 +228,6 @@ function ProfileSection() {
   )
 }
 
-/** Must match keys in ThemeContext ACCENT_COLORS */
-const ACCENT_DOTS = [
-  { name: 'indigo', dark: '#818CF8', light: '#4F46E5' },
-  { name: 'blue', dark: '#6366F1', light: '#818CF8' },
-  { name: 'green', dark: '#22C55E', light: '#16A34A' },
-  { name: 'red', dark: '#EF4444', light: '#DC2626' },
-  { name: 'yellow', dark: '#EAB308', light: '#CA8A04' },
-  { name: 'purple', dark: '#A855F7', light: '#9333EA' },
-  { name: 'slate', dark: '#94A3B8', light: '#475569' },
-]
-
 export default function Settings() {
   const deviceId = useDeviceId()
   const { mode, accentName, setAccentName, toggleMode, preset, setPreset, customAccent, setCustomAccent } = useTheme()
@@ -333,11 +323,7 @@ export default function Settings() {
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 10 }}>Theme Preset</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {[
-              { id: 'default', label: 'Default' },
-              { id: 'catppuccin', label: 'Catppuccin' },
-              { id: 'nord', label: 'Nord' },
-            ].map((t) => (
+            {THEME_PRESET_OPTIONS.map((t) => (
               <button key={t.id} onClick={() => setPreset(t.id)}
                 className="forge-btn" style={{ padding: '8px 16px', fontSize: 12, borderColor: preset === t.id ? 'var(--accent)' : 'var(--border)', color: preset === t.id ? 'var(--accent)' : 'var(--text-muted)', fontWeight: preset === t.id ? 600 : 400 }}>
                 {t.label}
@@ -349,7 +335,7 @@ export default function Settings() {
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 10 }}>Accent Color</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {ACCENT_DOTS.map((c) => (
+            {ACCENT_SWATCHES.map((c) => (
               <button key={c.name} onClick={() => setAccentName(c.name)} title={c.name}
                 style={{
                   width: 32, height: 32, borderRadius: '50%', background: c[mode],

@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
-import { json } from '@codemirror/lang-json'
+import { json, jsonParseLinter } from '@codemirror/lang-json'
+import { linter } from '@codemirror/lint'
 import { oneDark } from '@codemirror/theme-one-dark'
 import {
   AlignLeft, Minimize2, Copy, Trash2,
@@ -358,6 +359,8 @@ export default function JsonEditor() {
   const [convertKind, setConvertKind] = useState(null)
   const [jsonPathInput, setJsonPathInput] = useState('')
   const convertRef = useRef(null)
+
+  const jsonEditorExtensions = useMemo(() => [json(), linter(jsonParseLinter())], [])
 
   const validate = useCallback((val) => {
     if (!val.trim()) {
@@ -725,7 +728,7 @@ export default function JsonEditor() {
               <CodeMirror
                 value={code}
                 onChange={handleChange}
-                extensions={[json()]}
+                extensions={jsonEditorExtensions}
                 theme={oneDark}
                 height="100%"
                 basicSetup={{ lineNumbers: true, foldGutter: true }}

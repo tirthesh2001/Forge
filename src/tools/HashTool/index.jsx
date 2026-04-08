@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Copy, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import ToolHeader from '../../components/ToolHeader'
@@ -84,13 +84,12 @@ export default function HashTool() {
     setHashes(Object.fromEntries(results))
   }, [])
 
-  useEffect(() => {
-    if (source === 'text') {
-      if (!input) { setHashes({}); return }
-      const buf = new TextEncoder().encode(input)
-      computeHashes(buf)
-    }
-  }, [input, source, computeHashes])
+  const onTextChange = useCallback((value) => {
+    setInput(value)
+    if (source !== 'text') return
+    if (!value) setHashes({})
+    else computeHashes(new TextEncoder().encode(value))
+  }, [source, computeHashes])
 
   const processFile = useCallback(async (file) => {
     if (!file) return
@@ -130,7 +129,18 @@ export default function HashTool() {
       <div className="forge-card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
           <div className="tab-pills">
-            <button className={`tab-pill ${source === 'text' ? 'active' : ''}`} onClick={() => { setSource('text'); setFileName('') }}>Text</button>
+            <button
+              type="button"
+              className={`tab-pill ${source === 'text' ? 'active' : ''}`}
+              onClick={() => {
+                setSource('text')
+                setFileName('')
+                if (input) computeHashes(new TextEncoder().encode(input))
+                else setHashes({})
+              }}
+            >
+              Text
+            </button>
             <button className={`tab-pill ${source === 'file' ? 'active' : ''}`} onClick={() => setSource('file')}>
               <Upload size={12} /> File
             </button>
@@ -148,19 +158,17 @@ export default function HashTool() {
                 fileBufRef.current = null
                 setSource('text')
                 setInput(text)
+                computeHashes(new TextEncoder().encode(text))
               })
             }}
           >
             <textarea
-              value={input} onChange={(e) => setInput(e.target.value)}
+              className="forge-input-area"
+              value={input}
+              onChange={(e) => onTextChange(e.target.value)}
               placeholder="Enter text to hash..."
-              style={{
-                width: '100%', minHeight: 120, background: 'var(--bg)', border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)', padding: '14px 16px', color: 'var(--text)',
-                fontFamily: 'var(--font-code)', fontSize: 13, resize: 'vertical', outline: 'none',
-              }}
             />
-            {input && <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-code)' }}>{input.length} characters &middot; {new TextEncoder().encode(input).length} bytes</div>}
+            {input && <div className="forge-code-meta" style={{ marginTop: 8 }}>{input.length} characters &middot; {new TextEncoder().encode(input).length} bytes</div>}
           </DropZone>
         ) : fileName ? (
           <DropZone compact accept="*" onFile={processFile}>
