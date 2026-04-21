@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Clipboard, X, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useClipboardHistory } from '../contexts/ClipboardHistoryContext'
@@ -12,6 +12,12 @@ function preview(text, max = 120) {
 export default function ClipboardHistoryPanel() {
   const { items, copyAgain } = useClipboardHistory()
   const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const toggle = () => setOpen((o) => !o)
+    window.addEventListener('forge-toggle-clipboard', toggle)
+    return () => window.removeEventListener('forge-toggle-clipboard', toggle)
+  }, [])
 
   return (
     <>

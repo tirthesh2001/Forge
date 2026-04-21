@@ -117,6 +117,55 @@ export default function CSVEditor() {
   }, [])
 
   const addRow = useCallback(() => { setRows((prev) => [...prev, Array(headers.length).fill('')]) }, [headers])
+
+  const focusCell = useCallback((rowIdx, colIdx) => {
+    const root = tableScrollRef.current
+    if (!root) return
+    const target = root.querySelector(`input[data-row="${rowIdx}"][data-col="${colIdx}"]`)
+    if (target) {
+      target.focus()
+      target.select?.()
+    } else if (useRowVirtual) {
+      try {
+        rowVirtualizer.scrollToIndex(rowIdx, { align: 'center' })
+      } catch { /* ignore */ }
+      requestAnimationFrame(() => {
+        const retry = root.querySelector(`input[data-row="${rowIdx}"][data-col="${colIdx}"]`)
+        if (retry) { retry.focus(); retry.select?.() }
+      })
+    }
+  }, [useRowVirtual, rowVirtualizer])
+
+  const handleCellKeyDown = useCallback((e, rowIdx, colIdx) => {
+    if (headers.length === 0) return
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.shiftKey) {
+        if (rowIdx > 0) focusCell(rowIdx - 1, colIdx)
+        return
+      }
+      if (rowIdx === sortedRows.length - 1) {
+        addRow()
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => focusCell(rowIdx + 1, colIdx))
+        })
+      } else {
+        focusCell(rowIdx + 1, colIdx)
+      }
+    } else if (e.key === 'ArrowDown' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      if (rowIdx < sortedRows.length - 1) {
+        e.preventDefault()
+        focusCell(rowIdx + 1, colIdx)
+      }
+    } else if (e.key === 'ArrowUp' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      if (rowIdx > 0) {
+        e.preventDefault()
+        focusCell(rowIdx - 1, colIdx)
+      }
+    }
+  }, [headers.length, sortedRows.length, addRow, focusCell])
+
   const addColumn = useCallback(() => { setHeaders((prev) => [...prev, `Column ${prev.length + 1}`]); setRows((prev) => prev.map((r) => [...r, ''])) }, [])
   const deleteRow = useCallback((idx) => { const ai = sortCol !== null ? rows.indexOf(sortedRows[idx]) : idx; setRows((prev) => prev.filter((_, i) => i !== ai)) }, [sortCol, rows, sortedRows])
   const deleteColumn = useCallback((idx) => { setHeaders((prev) => prev.filter((_, i) => i !== idx)); setRows((prev) => prev.map((r) => r.filter((_, i) => i !== idx))); if (sortCol === idx) setSortCol(null) }, [sortCol])
@@ -301,6 +350,9 @@ export default function CSVEditor() {
                             <input
                               value={row[ci] ?? ''}
                               onChange={(e) => updateCell(ri, ci, e.target.value)}
+                              onKeyDown={(e) => handleCellKeyDown(e, ri, ci)}
+                              data-row={ri}
+                              data-col={ci}
                               className="w-full outline-none"
                               style={{ background: 'transparent', border: 'none', padding: '8px 14px', color: 'var(--text)', fontFamily: 'var(--font-code)', fontSize: 13 }}
                             />
@@ -326,6 +378,9 @@ export default function CSVEditor() {
                           <input
                             value={row[ci] ?? ''}
                             onChange={(e) => updateCell(ri, ci, e.target.value)}
+                            onKeyDown={(e) => handleCellKeyDown(e, ri, ci)}
+                            data-row={ri}
+                            data-col={ci}
                             className="w-full outline-none"
                             style={{ background: 'transparent', border: 'none', padding: '8px 14px', color: 'var(--text)', fontFamily: 'var(--font-code)', fontSize: 13 }}
                           />

@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   QrCode, Braces, GitCompare, Table, Palette, KeyRound, Video,
   FileCode2, Clock, Hash, Regex, FileText, Home, Settings, Image, Send,
-  ChevronLeft, ChevronRight, Sun, Moon, Copy,
+  ChevronLeft, ChevronRight, Sun, Moon, Copy, FileInput, Link2,
 } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 import { useDeviceId } from '../contexts/DeviceContext'
@@ -25,6 +25,8 @@ const navItems = [
   { label: 'Markdown', icon: FileText, path: '/markdown', defaultKey: null },
   { label: 'Image Tool', icon: Image, path: '/image', defaultKey: null },
   { label: 'API Client', icon: Send, path: '/api', defaultKey: null },
+  { label: 'File Converter', icon: FileInput, path: '/converter', defaultKey: null },
+  { label: 'URL Manager', icon: Link2, path: '/urls', defaultKey: null },
 ]
 
 export { navItems }

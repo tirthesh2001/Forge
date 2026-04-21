@@ -4,6 +4,7 @@ import {
   QrCode, Braces, GitCompare, Table, Palette, KeyRound, Video,
   FileCode2, Clock, Hash, Regex, FileText, Image, Send,
   ArrowRight, Copy, Download, GripVertical, Share2,
+  FileInput, Link2,
 } from 'lucide-react'
 import { useDeviceId } from '../../contexts/DeviceContext'
 import useCloudState from '../../hooks/useCloudState'
@@ -11,6 +12,8 @@ import ForgeIcon from '../../components/ForgeIcon'
 import DotGrid from '../../components/DotGrid'
 import toast from 'react-hot-toast'
 import { copyWithHistory } from '../../utils/copyWithHistory'
+import { totalBookmarkCount, normalizeBookmarks } from '../URLManager/utils'
+import BookmarksSection from './BookmarksSection'
 
 const DEFAULT_TOOLS = [
   { id: 'qr', label: 'QR Tools', desc: 'Generate & scan QR codes', icon: 'QrCode', path: '/qr', color: '#00D4FF' },
@@ -27,17 +30,20 @@ const DEFAULT_TOOLS = [
   { id: 'markdown', label: 'Markdown', desc: 'Live preview with editor', icon: 'FileText', path: '/markdown', color: '#16A34A' },
   { id: 'image', label: 'Image Tool', desc: 'Resize, compress & convert images', icon: 'Image', path: '/image', color: '#F97316' },
   { id: 'api', label: 'API Client', desc: 'HTTP request builder', icon: 'Send', path: '/api', color: '#06B6D4' },
+  { id: 'converter', label: 'File Converter', desc: 'Convert between 20+ file formats', icon: 'FileInput', path: '/converter', color: '#EC4899' },
+  { id: 'urls', label: 'URL Manager', desc: 'Save, group & share bookmarks', icon: 'Link2', path: '/urls', color: '#14B8A6' },
 ]
 
-const ICON_MAP = { QrCode, Braces, GitCompare, Table, Palette, KeyRound, Video, FileCode2, Clock, Hash, Regex, FileText, Image, Send }
+const ICON_MAP = { QrCode, Braces, GitCompare, Table, Palette, KeyRound, Video, FileCode2, Clock, Hash, Regex, FileText, Image, Send, FileInput, Link2 }
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const deviceId = useDeviceId()
   const [savedQr] = useCloudState('qr-saved', [])
   const [savedColors] = useCloudState('color-saved', [])
-  const [meetHistory] = useCloudState('meet-history', [])
-  const [recentColors] = useCloudState('recent-colors', [])
+  const [apiHistory] = useCloudState('api-client-history', [])
+  const [apiCollections] = useCloudState('api-client-collections', [])
+  const [urlBookmarks] = useCloudState('url-bookmarks', { groups: [], ungrouped: [] })
   const [toolOrder, setToolOrder] = useCloudState('dashboard-tool-order', null)
   const [profile] = useCloudState('user-profile', { firstName: '', lastName: '', email: '', birthday: '' })
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -90,11 +96,15 @@ export default function Dashboard() {
   const userName = profile?.firstName ? `, ${profile.firstName}` : ''
   const greeting = `${timeGreeting}${userName}`
 
+  const safeLen = (x) => (Array.isArray(x) ? x.length : 0)
+  const bookmarkCount = totalBookmarkCount(normalizeBookmarks(urlBookmarks))
+
   const stats = [
-    { label: 'Saved QR Codes', value: savedQr.length, color: '#00D4FF', path: '/qr' },
-    { label: 'Saved Colors', value: savedColors.length, color: '#A855F7', path: '/color' },
-    { label: 'Recent Meetings', value: meetHistory.length, color: '#22C55E', path: '/meet' },
-    { label: 'Recent Colors', value: recentColors.length, color: '#EAB308', path: '/color' },
+    { label: 'API Requests', value: safeLen(apiHistory), color: '#06B6D4', path: '/api' },
+    { label: 'Saved Requests', value: safeLen(apiCollections), color: '#6366F1', path: '/api' },
+    { label: 'Saved URLs', value: bookmarkCount, color: '#14B8A6', path: '/urls' },
+    { label: 'Saved QR Codes', value: safeLen(savedQr), color: '#00D4FF', path: '/qr' },
+    { label: 'Saved Colors', value: safeLen(savedColors), color: '#A855F7', path: '/color' },
   ]
 
   const onDragStart = (e, idx) => { setDragIdx(idx); e.dataTransfer.effectAllowed = 'move'; e.currentTarget.style.opacity = '0.5' }
@@ -192,6 +202,8 @@ export default function Dashboard() {
             )
           })}
         </div>
+
+        <BookmarksSection />
       </div>
     </div>
   )

@@ -18,6 +18,8 @@ const RegexTool = lazy(() => import('./tools/RegexTool'))
 const MarkdownTool = lazy(() => import('./tools/MarkdownTool'))
 const ImageTool = lazy(() => import('./tools/ImageTool'))
 const APITool = lazy(() => import('./tools/APITool'))
+const FileConverter = lazy(() => import('./tools/FileConverter'))
+const URLManager = lazy(() => import('./tools/URLManager'))
 const Settings = lazy(() => import('./tools/Settings'))
 
 export function LoadingSpinner() {
@@ -59,6 +61,8 @@ export default function App() {
           <Route path="markdown" element={<LazyRoute><MarkdownTool /></LazyRoute>} />
           <Route path="image" element={<LazyRoute><ImageTool /></LazyRoute>} />
           <Route path="api" element={<LazyRoute><APITool /></LazyRoute>} />
+          <Route path="converter" element={<LazyRoute><FileConverter /></LazyRoute>} />
+          <Route path="urls" element={<LazyRoute><URLManager /></LazyRoute>} />
           <Route path="settings" element={<LazyRoute><Settings /></LazyRoute>} />
         </Route>
       </Routes>

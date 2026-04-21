@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-export default function DotGrid({ style, className }) {
+export default function DotGrid({ style, className, globalMouse = false, spacing = 28, baseRadius = 1.2, maxRadius = 3.5, influence = 120, baseAlpha = 0.12 }) {
   const canvasRef = useRef(null)
   const mouseRef = useRef({ x: -1000, y: -1000 })
   const rafRef = useRef(null)
@@ -11,10 +11,10 @@ export default function DotGrid({ style, className }) {
     const ctx = canvas.getContext('2d')
     const dpr = window.devicePixelRatio || 1
 
-    const SPACING = 28
-    const BASE_R = 1.2
-    const MAX_R = 3.5
-    const INFLUENCE = 120
+    const SPACING = spacing
+    const BASE_R = baseRadius
+    const MAX_R = maxRadius
+    const INFLUENCE = influence
 
     let w, h, cols, rows
 
@@ -43,7 +43,7 @@ export default function DotGrid({ style, className }) {
           const dist = Math.sqrt(dx * dx + dy * dy)
           const t = Math.max(0, 1 - dist / INFLUENCE)
           const radius = BASE_R + (MAX_R - BASE_R) * t * t
-          const alpha = 0.12 + 0.5 * t * t
+          const alpha = baseAlpha + 0.5 * t * t
 
           ctx.beginPath()
           ctx.arc(x, y, radius, 0, Math.PI * 2)
@@ -52,7 +52,7 @@ export default function DotGrid({ style, className }) {
             ctx.globalAlpha = alpha
           } else {
             ctx.fillStyle = accent
-            ctx.globalAlpha = 0.12
+            ctx.globalAlpha = baseAlpha
           }
           ctx.fill()
         }
@@ -73,17 +73,18 @@ export default function DotGrid({ style, className }) {
     resize()
     draw()
 
-    canvas.addEventListener('mousemove', handleMouseMove)
-    canvas.addEventListener('mouseleave', handleMouseLeave)
+    const target = globalMouse ? window : canvas
+    target.addEventListener('mousemove', handleMouseMove)
+    if (!globalMouse) canvas.addEventListener('mouseleave', handleMouseLeave)
     window.addEventListener('resize', resize)
 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      canvas.removeEventListener('mousemove', handleMouseMove)
-      canvas.removeEventListener('mouseleave', handleMouseLeave)
+      target.removeEventListener('mousemove', handleMouseMove)
+      if (!globalMouse) canvas.removeEventListener('mouseleave', handleMouseLeave)
       window.removeEventListener('resize', resize)
     }
-  }, [])
+  }, [globalMouse, spacing, baseRadius, maxRadius, influence, baseAlpha])
 
   return <canvas ref={canvasRef} className={className} style={{ display: 'block', width: '100%', height: '100%', ...style }} />
 }

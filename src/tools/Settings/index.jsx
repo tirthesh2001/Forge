@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { Download, Upload, Trash2, Copy, AlertCircle, Sun, Moon, Keyboard, User, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { Download, Upload, Trash2, Copy, AlertCircle, Sun, Moon, User, HelpCircle, ChevronDown, ChevronUp, Cloud, Eye, EyeOff, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useDeviceId } from '../../contexts/DeviceContext'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -8,129 +8,56 @@ import useCloudState, { FORGE_STORAGE_IMPORT } from '../../hooks/useCloudState'
 import { copyWithHistory } from '../../utils/copyWithHistory'
 import ToolHeader from '../../components/ToolHeader'
 import { ACCENT_SWATCHES, THEME_PRESET_OPTIONS } from '../../theme/forgeThemeConfig'
+import ShortcutEditor from './ShortcutEditor'
+import { getServerApiKey, setServerApiKey } from '../FileConverter/services'
 
-const SHORTCUT_TOOLS = [
-  { key: '1', label: 'QR Tools', path: '/qr' },
-  { key: '2', label: 'JSON Editor', path: '/json-editor' },
-  { key: '3', label: 'Diff Tool', path: '/diff' },
-  { key: '4', label: 'CSV Editor', path: '/csv-editor' },
-  { key: '5', label: 'Color Converter', path: '/color' },
-  { key: '6', label: 'JWT Tool', path: '/jwt' },
-  { key: '7', label: 'Meet', path: '/meet' },
-  { key: '8', label: 'Base64', path: '/base64' },
-  { key: '9', label: 'Timestamp', path: '/timestamp' },
-  { key: '0', label: 'Hash', path: '/hash' },
-  { key: null, label: 'Regex Tester', path: '/regex' },
-  { key: null, label: 'Markdown', path: '/markdown' },
-  { key: null, label: 'Image Tool', path: '/image' },
-  { key: null, label: 'API Client', path: '/api' },
-  { key: null, label: 'Settings', path: '/settings' },
-]
+function ServerConversionSection() {
+  const [value, setValue] = useState(() => getServerApiKey())
+  const [show, setShow] = useState(false)
 
-const DEFAULT_SHORTCUT_MAP = Object.fromEntries(
-  SHORTCUT_TOOLS.filter((t) => t.key !== null).map((t) => [t.key, t.path])
-)
+  const save = useCallback(() => {
+    setServerApiKey(value.trim())
+    toast.success(value.trim() ? 'CloudConvert API key saved' : 'CloudConvert API key removed')
+  }, [value])
 
-function buildFullMap(custom) {
-  if (Object.keys(custom).length === 0) return { ...DEFAULT_SHORTCUT_MAP }
-  const map = {}
-  SHORTCUT_TOOLS.forEach((t) => {
-    const customEntry = Object.entries(custom).find(([, p]) => p === t.path)
-    if (customEntry) {
-      map[customEntry[0]] = t.path
-    } else if (t.key && !custom[t.key]) {
-      map[t.key] = t.path
-    }
-  })
-  Object.entries(custom).forEach(([k, p]) => { map[k] = p })
-  return map
-}
-
-function ShortcutEditor() {
-  const [shortcuts, setShortcuts] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('forge-custom-shortcuts')) || {} } catch { return {} }
-  })
-  const [editing, setEditing] = useState(null)
-
-  const resolvedMap = buildFullMap(shortcuts)
-
-  const saveShortcuts = useCallback((updated) => {
-    setShortcuts(updated)
-    if (Object.keys(updated).length > 0) {
-      localStorage.setItem('forge-custom-shortcuts', JSON.stringify(updated))
-    } else {
-      localStorage.removeItem('forge-custom-shortcuts')
-    }
-    window.dispatchEvent(new Event('forge-shortcuts-changed'))
-    toast.success('Shortcuts updated')
+  const clear = useCallback(() => {
+    setServerApiKey('')
+    setValue('')
+    toast.success('API key cleared')
   }, [])
-
-  const resetShortcuts = useCallback(() => {
-    localStorage.removeItem('forge-custom-shortcuts')
-    setShortcuts({})
-    window.dispatchEvent(new Event('forge-shortcuts-changed'))
-    toast.success('Shortcuts reset to defaults')
-  }, [])
-
-  const handleKeyCapture = useCallback((e, tool) => {
-    if (e.key === 'Escape') { setEditing(null); return }
-    if (e.key.length === 1 && /[0-9]/.test(e.key)) {
-      const updated = { ...shortcuts }
-      Object.keys(updated).forEach((k) => { if (updated[k] === tool.path) delete updated[k] })
-      const currentHolder = Object.entries(resolvedMap).find(([k]) => k === e.key)
-      if (currentHolder) {
-        const oldPath = currentHolder[1]
-        if (oldPath !== tool.path) {
-          Object.keys(updated).forEach((k) => { if (updated[k] === oldPath) delete updated[k] })
-          const oldTool = SHORTCUT_TOOLS.find((t) => t.path === oldPath)
-          if (oldTool?.key && oldTool.key !== e.key) {
-            const keyFree = !Object.values(updated).length || !Object.entries(buildFullMap(updated)).find(([k]) => k === oldTool.key)
-            if (keyFree) { /* old tool falls back to its default */ }
-          }
-        }
-      }
-      updated[e.key] = tool.path
-      saveShortcuts(updated)
-      setEditing(null)
-    }
-  }, [shortcuts, saveShortcuts, resolvedMap])
-
-  const getAssignedKey = (tool) => {
-    const entry = Object.entries(resolvedMap).find(([, p]) => p === tool.path)
-    return entry ? entry[0] : null
-  }
 
   return (
     <div className="forge-card" style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Keyboard size={16} style={{ color: 'var(--text-muted)' }} />
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Keyboard Shortcuts</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <Cloud size={16} style={{ color: 'var(--text-muted)' }} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Server Conversion (CloudConvert)</span>
+      </div>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.5 }}>
+        Unlocks server-side conversion for audio, video, Office documents, archives, and formats the browser can't handle.
+        Add a free CloudConvert API key — files are uploaded over TLS and deleted after conversion.
+      </p>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 220, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+          <input
+            type={show ? 'text' : 'password'}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="eyJhbGciOiJIUzI1…"
+            style={{ flex: 1, padding: '10px 12px', background: 'transparent', border: 'none', color: 'var(--text)', fontFamily: 'var(--font-code)', fontSize: 12, outline: 'none' }}
+          />
+          <button onClick={() => setShow((s) => !s)} style={{ background: 'transparent', border: 'none', padding: '0 10px', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex' }}>
+            {show ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
         </div>
-        {Object.keys(shortcuts).length > 0 && (
-          <button onClick={resetShortcuts} className="forge-btn" style={{ fontSize: 11, padding: '3px 8px' }}>Reset</button>
+        <button onClick={save} className="forge-btn forge-btn-primary" style={{ padding: '8px 14px', fontSize: 12 }}>Save</button>
+        {getServerApiKey() && (
+          <button onClick={clear} className="forge-btn" style={{ padding: '8px 14px', fontSize: 12 }}>Clear</button>
         )}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {SHORTCUT_TOOLS.map((tool) => {
-          const assignedKey = getAssignedKey(tool)
-          return (
-            <div key={tool.path} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-              <span style={{ fontSize: 13, color: 'var(--text)' }}>{tool.label}</span>
-              {editing === tool.path ? (
-                <input autoFocus onKeyDown={(e) => handleKeyCapture(e, tool)} onBlur={() => setEditing(null)}
-                  placeholder="Press 0-9" style={{ width: 80, background: 'var(--bg)', border: '1px solid var(--accent)', borderRadius: 4, padding: '3px 8px', color: 'var(--accent)', fontFamily: 'var(--font-code)', fontSize: 12, outline: 'none', textAlign: 'center' }} />
-              ) : (
-                <button onClick={() => setEditing(tool.path)}
-                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '3px 10px', fontFamily: 'var(--font-code)', fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer', minWidth: 50, textAlign: 'center', opacity: assignedKey ? 1 : 0.5 }}>
-                  {assignedKey ? `\u2318${assignedKey}` : 'Not set'}
-                </button>
-              )}
-            </div>
-          )
-        })}
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, opacity: 0.6 }}>Click a shortcut to reassign. Press 0-9 to set a new key. Duplicates are automatically swapped.</div>
+      <a href="https://cloudconvert.com/api/v2/keys" target="_blank" rel="noreferrer"
+        style={{ fontSize: 11, color: 'var(--accent)', marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
+        Get a CloudConvert API key <ExternalLink size={11} />
+      </a>
     </div>
   )
 }
@@ -366,6 +293,9 @@ export default function Settings() {
 
       {/* Keyboard Shortcuts */}
       <ShortcutEditor />
+
+      {/* Server Conversion */}
+      <ServerConversionSection />
 
       {/* FAQ */}
       <FAQSection />
