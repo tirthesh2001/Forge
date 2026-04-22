@@ -20,6 +20,8 @@ A fast, offline-capable developer toolkit that bundles essential day-to-day tool
 | **Markdown Preview** | Live markdown editor with rendered preview |
 | **Image Tool** | Client-side image resize, compress, and format conversion (PNG, JPEG, WebP) |
 | **API Client** | HTTP request builder with headers, auth, body, and response viewing |
+| **File Converter** | Convert files between formats (images, documents, data) with client-side processing and optional CloudConvert server support |
+| **URL Manager** | Organize bookmarks into color-coded groups with favicon previews, search, drag-and-drop reordering, and sharing |
 
 ### Platform Features
 
@@ -41,6 +43,152 @@ A fast, offline-capable developer toolkit that bundles essential day-to-day tool
 - **CodeMirror 6** - JSON editor with syntax highlighting
 - **Supabase** - Cloud data persistence
 - **Workbox** - Service worker for offline PWA support
+
+## Architecture
+
+### Component Tree
+
+```mermaid
+graph TD
+  main["main.jsx"] --> ThemeProvider
+  ThemeProvider --> DeviceProvider
+  DeviceProvider --> ClipboardHistoryProvider
+  ClipboardHistoryProvider --> App
+
+  App --> BrowserRouter
+  BrowserRouter --> Toast
+  BrowserRouter --> LayoutRoute["Route: Layout"]
+
+  LayoutRoute --> DotGrid["DotGrid (background)"]
+  LayoutRoute --> Sidebar
+  LayoutRoute --> CommandPalette
+  LayoutRoute --> ClipboardHistoryPanel
+  LayoutRoute --> Outlet["Outlet (AnimatePresence)"]
+
+  Outlet --> Dashboard
+  Outlet --> QRTools
+  Outlet --> JsonEditor
+  Outlet --> DiffTool
+  Outlet --> CSVEditor
+  Outlet --> ColorConverter
+  Outlet --> JWTTool
+  Outlet --> MeetTool
+  Outlet --> Base64Tool
+  Outlet --> TimestampTool
+  Outlet --> HashTool
+  Outlet --> RegexTool
+  Outlet --> MarkdownTool
+  Outlet --> ImageTool
+  Outlet --> APITool
+  Outlet --> FileConverter
+  Outlet --> URLManager
+  Outlet --> Settings
+```
+
+### Data Flow (`useCloudState`)
+
+Every tool that needs persistent, syncable state uses the `useCloudState(category, defaultValue)` hook. It keeps data in `localStorage` for instant reads and optionally syncs to Supabase for cross-device access.
+
+```mermaid
+sequenceDiagram
+  participant Component
+  participant useCloudState
+  participant localStorage
+  participant Supabase
+
+  Component->>useCloudState: mount(category, default)
+  useCloudState->>localStorage: read forge-{category}
+  localStorage-->>useCloudState: cached value
+  useCloudState->>Supabase: SELECT data WHERE device_id, category
+  Supabase-->>useCloudState: remote value (wins on merge)
+  useCloudState-->>Component: resolved state
+
+  Component->>useCloudState: update(newValue)
+  useCloudState->>localStorage: setItem (immediate)
+  useCloudState->>Supabase: UPSERT after 500ms debounce
+```
+
+Key details:
+- On mount, `localStorage` is read synchronously for instant UI; a Supabase fetch runs in parallel and overwrites if a remote value exists.
+- Writes go to `localStorage` immediately. A debounced (500ms) `UPSERT` syncs to `forge_data` keyed by `(device_id, category)`.
+- Payloads exceeding `SOFT_MAX_PERSIST_BYTES` are kept in-memory only and not persisted.
+- A `FORGE_STORAGE_IMPORT` custom event triggers all hooks to re-read from `localStorage` after a Settings import.
+
+### State Management
+
+Forge uses **no global store library** (no Redux, Zustand, etc.). State is managed through:
+
+| Layer | Mechanism | Scope |
+|-------|-----------|-------|
+| **React Context** | `ThemeContext`, `DeviceContext`, `ClipboardHistoryContext` | App-wide settings, device identity, clipboard |
+| **`useCloudState` hook** | `localStorage` + Supabase | Per-tool persistent data (e.g. saved QR codes, JSON content, bookmarks) |
+| **Component `useState`** | React built-in | Ephemeral UI state within each tool |
+
+## Project Structure
+
+```
+forge/
+├── public/                  # Static assets, PWA icons
+├── src/
+│   ├── main.jsx             # Entry point, provider wrappers
+│   ├── App.jsx              # Router, lazy-loaded routes
+│   ├── index.css            # Global + Tailwind styles
+│   │
+│   ├── components/          # Shared UI components
+│   │   ├── Layout.jsx       #   Shell: sidebar + outlet + command palette
+│   │   ├── Sidebar.jsx      #   Navigation (desktop sidebar / mobile bottom bar)
+│   │   ├── CommandPalette.jsx#   Cmd+K fuzzy search launcher
+│   │   ├── ClipboardHistoryPanel.jsx
+│   │   ├── DotGrid.jsx      #   Animated background pattern
+│   │   ├── ToolHeader.jsx   #   Consistent header for each tool page
+│   │   ├── DropZone.jsx     #   Drag-and-drop file target
+│   │   ├── ForgeIcon.jsx    #   Brand icon component
+│   │   ├── ForgeEmptyState.jsx
+│   │   ├── HelpModal.jsx
+│   │   ├── LargeContentBanner.jsx
+│   │   └── Toast.jsx
+│   │
+│   ├── contexts/            # React Context providers
+│   │   ├── ThemeContext.jsx  #   Dark/light mode, accents, presets
+│   │   ├── DeviceContext.jsx #   Forge ID (anonymous device identity)
+│   │   └── ClipboardHistoryContext.jsx
+│   │
+│   ├── hooks/
+│   │   └── useCloudState.js #   localStorage + Supabase sync hook
+│   │
+│   ├── tools/               # One folder per tool (each has index.jsx)
+│   │   ├── Dashboard/       #   Home screen with tool grid + bookmarks
+│   │   ├── QRGenerator/
+│   │   ├── JsonEditor/
+│   │   ├── DiffTool/
+│   │   ├── CSVEditor/
+│   │   ├── ColorConverter/
+│   │   ├── JWTTool/
+│   │   ├── MeetTool/
+│   │   ├── Base64Tool/
+│   │   ├── TimestampTool/
+│   │   ├── HashTool/
+│   │   ├── RegexTool/
+│   │   ├── MarkdownTool/
+│   │   ├── ImageTool/
+│   │   ├── APITool/
+│   │   ├── FileConverter/   #   Sub-components, hooks, services, constants
+│   │   ├── URLManager/
+│   │   └── Settings/        #   Theme, shortcuts, import/export, FAQ
+│   │
+│   ├── shortcuts/           # Keyboard shortcut registry + dispatch
+│   ├── theme/               # Theme preset configs (Catppuccin, Nord, etc.)
+│   ├── lib/                 # Supabase client init
+│   ├── utils/               # Shared helpers (copy, parse, format, color)
+│   ├── constants/           # Storage limits, etc.
+│   └── workers/             # Web Workers (CSV/data parsing)
+│
+├── vite.config.js           # Vite + React + Tailwind + PWA config
+├── eslint.config.js         # ESLint 9 flat config
+├── vercel.json              # Vercel deploy settings, SPA rewrites
+├── .env.example             # Supabase env var template
+└── package.json
+```
 
 ## Setup
 
